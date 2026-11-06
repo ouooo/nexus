@@ -1,0 +1,24 @@
+# NEXUS 最小可运行示例（对外发布用，不含任何站点专属挂载）
+# 用法：docker compose -f docker-compose.example.yml up -d
+services:
+  nexus:
+    image: nexus:2.1.0          # 发布后改为 <registry>/nexus:2.1.0
+    container_name: nexus
+    restart: unless-stopped
+    ports:
+      - "28081:28080"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      # 唯一必需挂载：配置/会话/收藏/播放历史（首次启动自动生成 config.json）
+      - ./data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:28080/',timeout=3)\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+# 可选：需要读取宿主机媒体目录 / MP 数据库时，按需追加只读挂载，例如
+#     - /path/to/media:/m1:ro
+#     - /path/to/mp/config:/mp-config:ro
