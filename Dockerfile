@@ -14,8 +14,8 @@ LABEL org.opencontainers.image.title="NEXUS" \
 
 WORKDIR /app
 
-# 应用本体只有两个文件；index.html 是 dashboard.html 的同字节副本（api.py 以它为入口）
-COPY api.py dashboard.html ./
+# 应用本体：api.py + dashboard.html + search_engine.py（站点搜索/解析引擎）；index.html 为 dashboard.html 的同字节副本
+COPY api.py dashboard.html search_engine.py ./
 COPY dashboard.html ./index.html
 
 ENV DASH_API_PORT=28080 \

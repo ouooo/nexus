@@ -782,6 +782,7 @@ PATH_PERM = {
     '/api/carousel': 'media',
     '/api/search/emby': 'media',
     '/api/search/pt': 'search',
+    '/api/search/pt/sites': 'search',
     '/api/search/pansou': 'search',
     '/api/search/online': 'search',
     '/api/tmdb/detail': 'media',
@@ -1984,8 +1985,8 @@ def media_wall(type='all', user_id=None, limit=2000):
         })
     return out
 
-def pt_search(query, exclude=''):
-    """PT 站串行搜索：逐站请求，站间间隔 1.5s 限速"""
+def _pt_search_legacy(query, exclude=''):
+    """旧版 PT 站串行搜索（保留作兜底：URL/解析全写死，仅支持 NexusPHP 表格）"""
     import time
     sites = []
     try:
@@ -2068,6 +2069,72 @@ def pt_search(query, exclude=''):
             seen.add(key)
             unique.append(r)
     return unique[:100]
+
+
+def pt_search(query, exclude=''):
+    """PT 站并发搜索（声明式站点定义 + 引擎族解析，实现见 search_engine.py）
+
+    - 站点定义落在 /data/sites.json（首次自动从 MoviePilot 导入），加站/改站不改代码、不发镜像
+    - 引擎族解析（NexusPHP/Unit3D/Gazelle/Discuz/JSON-API/通用）+ 字段多选择器回退 + 锚点兜底
+    - 线程池并发 + 单站独立超时 + 单次总预算 + 熔断 + 60s 缓存，慢站不拖累整体
+    """
+    if not query:
+        return []
+    try:
+        import search_engine as _se
+    except Exception as e:
+        _log('ERROR', 'search', 'search_engine 导入失败，回退旧实现: %s' % e)
+        return _pt_search_legacy(query, exclude)
+    try:
+        return _se.search_all(query, exclude, mp_db_path=MP_DB, data_dir=DATA_DIR,
+                              proxy_url=_current_proxy_url())
+    except Exception as e:
+        _log('ERROR', 'search', 'search_engine 执行失败，回退旧实现: %s' % e)
+        return _pt_search_legacy(query, exclude)
+
+
+def pt_sites_health():
+    """站点健康度快照（不含 cookie，供站点管理页/排障使用）"""
+    try:
+        import search_engine as _se
+    except Exception:
+        return []
+    return _se.health_snapshot(DATA_DIR, MP_DB)
+
+
+def pt_save_sites(payload):
+    """保存站点定义到 /data/sites.json。payload: {'sites': [...]} 或单个站点对象。"""
+    import search_engine as _se
+    store = _se.SiteStore(DATA_DIR)
+    store.sites = []
+    incoming = payload.get('sites') if isinstance(payload, dict) else None
+    if incoming is None:
+        incoming = [payload] if isinstance(payload, dict) else []
+    existing = {}
+    path = os.path.join(DATA_DIR, _se.SITES_FILE)
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for s in (json.load(f).get('sites') or []):
+                    existing[s.get('id')] = s
+        except Exception:
+            pass
+    saved = []
+    for s in incoming or []:
+        if not isinstance(s, dict) or not s.get('base_url'):
+            continue
+        sid = s.get('id') or _se._site_id(s.get('name') or '', s.get('base_url') or '')
+        merged = dict(existing.get(sid) or {})
+        merged.update(s)
+        merged['id'] = sid
+        merged.setdefault('name', sid)
+        merged.setdefault('engine', 'nexusphp')
+        merged.setdefault('enabled', True)
+        merged.setdefault('search', {'path': '/torrents.php', 'method': 'GET', 'keywordParam': 'search'})
+        saved.append(merged)
+    store.sites = saved
+    store.save()
+    return {'saved': len(saved)}
 
 def _cjk(s):
     return bool(re.search(r'[\u4e00-\u9fff]', s or ''))
@@ -3633,6 +3700,28 @@ class Handler(BaseHTTPRequestHandler):
                 favs = [f for f in favs if f.get('id') != fid]
                 save_favs(favs)
             self.send_json({'ok': True, 'favorites': favs})
+        elif path == '/api/search/pt/sites':
+            # 站点定义保存（写）：settings:manage 权限；cookie 不回显
+            s = self._require_auth()
+            if not s:
+                self.send_json({'error': '未授权'}, code=401)
+                return
+            role = s.get('role', 'admin')
+            if not _has_perm(get_role(role)['permissions'], 'settings:manage'):
+                self.send_json({'error': '无权限修改站点定义'}, code=403)
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode('utf-8') if length else '{}'
+            try:
+                data = json.loads(body)
+            except Exception:
+                self.send_json({'error': '无效请求'}, code=400)
+                return
+            try:
+                self.send_json({'ok': True, **pt_save_sites(data)})
+            except Exception as e:
+                self.send_json({'error': '保存失败: %s' % e}, code=500)
+
         elif path == '/api/config':
             # 设置保存需要认证 + settings 权限
             s = self._require_auth()
@@ -4106,6 +4195,10 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 results = pt_search(q, ex)
                 self.send_json({'results': results})
+
+        elif path == '/api/search/pt/sites':
+            # 站点清单一览 + 健康度（不含 cookie）
+            self.send_json({'sites': pt_sites_health()})
 
         elif path == '/api/search/pansou':
             q = params.get('q', [''])[0]
