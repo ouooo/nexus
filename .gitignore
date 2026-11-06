@@ -1,0 +1,23 @@
+# 数据与本地配置永不入库
+data/
+.env
+.env.*
+config.json
+*.bak
+*.bak.*
+_walk/
+__pycache__/
+*.pyc
+*.log
+preview_*
+*.png
+*.jpg
+*.jpeg
+_deploy_recreate.sh
+
+_privacy_scan.py
+_jsextract_local.py
+_combined.js
+# 本地开发/审计脚本，永不入库
+_*.py
+*.bak

@@ -1,0 +1,25 @@
+# 构建上下文治理：只允许 Dockerfile 显式 COPY 的文件进入
+# 但上下文体积与敏感文件外泄必须先在这里挡掉
+*
+!api.py
+!dashboard.html
+!Dockerfile
+
+# 明确排除（保险，即使上面的白名单被改成 COPY . .）
+.env
+.env.*
+*.bak
+*.bak.*
+*.bak.*.*
+_walk/
+preview_*
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.md
+.git/
+gitignore
+data/
+**/__pycache__/
+*.pyc
