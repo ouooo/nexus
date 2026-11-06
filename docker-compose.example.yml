@@ -9,8 +9,16 @@ services:
       - "28081:28080"
     environment:
       - TZ=Asia/Shanghai
+      # 服务连接可在此预置，也可留空后到「设置」页里填（环境变量优先）
+      # - DASH_EMBY_HOST=http://192.168.1.10:8096
+      # - DASH_EMBY_API_KEY=
+      # - DASH_QB_HOST=http://192.168.1.10:8080
+      # - DASH_QB_USER=admin
+      # - DASH_QB_PASS=
+      # - DASH_PROXY_URL=
+      # - DASH_TMDB_API_KEY=
     volumes:
-      # 唯一必需挂载：配置/会话/收藏/播放历史（首次启动自动生成 config.json）
+      # 唯一必需挂载：配置/会话/收藏/播放历史（首次保存设置后生成 config.json）
       - ./data:/data
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:28080/',timeout=3)\" || exit 1"]
