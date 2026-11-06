@@ -18,14 +18,40 @@ docker run -d --name nexus \
   bonanzalee/nexus:2.1.0
 ```
 
-浏览器打开 `http://<host>:28081/`。首次启动会生成 `config.json`，服务连接、代理、TMDB Key 等均在「设置」页配置。
+浏览器打开 `http://<host>:28081/`。
+
+## 首次登录
+
+首次启动**不会**生成 `config.json`：配置先在内存里用默认值跑起来，同时在日志里打印一个随机初始口令（用户名 `admin`，**只打印这一次**）：
+
+```bash
+docker logs nexus 2>&1 | grep 初始口令
+```
+
+登录后请立刻改密码，并在「设置」页保存一次。**保存之前重启容器会重新生成口令**，之前那个就失效了；保存之后配置落到 `/data/config.json`，重启沿用。
+
+服务连接、代理、TMDB Key 等都在「设置」页配置；服务地址也可以用环境变量预置（见下表），容器里没有内置任何个人配置。
 
 ## 环境变量
+
+优先级：**环境变量 > `/data/config.json`（设置页里填的值）**。全部可留空，留空就在设置页里配。
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `DASH_API_PORT` | `28080` | 容器内监听端口 |
 | `DASH_DATA_DIR` | `/data` | 配置与数据目录（建议挂卷持久化） |
+| `DASH_EMBY_HOST` | 空 | Emby 地址，如 `http://emby:8096` |
+| `DASH_EMBY_API_KEY` | 空 | Emby API Key |
+| `DASH_EMBY_USER_ID` | 空 | Emby 用户 ID（观影历程用） |
+| `DASH_QB_HOST` | 空 | qBittorrent Web API 地址 |
+| `DASH_QB_USER` / `DASH_QB_PASS` | 空 | qB 用户名 / 密码 |
+| `DASH_QB_API_KEY` | 空 | qB API Key（新版本 qB 可用它代替账号密码） |
+| `DASH_SA_HOST` / `DASH_DS_HOST` | `127.0.0.1` / 空 | 主机地址，用于服务分组与探测 |
+| `DASH_MP_DB` | 空 | MoviePilot `user.db` 路径（挂载后启用订阅查询） |
+| `DASH_MP_SUB_SCRIPT` | 空 | 向 MoviePilot 添加订阅的写库脚本路径 |
+| `DASH_PROXY_URL` | 空 | 出站代理（TMDB、海报图片走它） |
+| `DASH_TMDB_API_KEY` | 空 | TMDB Key，也可在设置页填 |
+| `DASH_SCRIPTS_DIR` | 空 | 脚本目录，挂载后启用「脚本」页 |
 | `TZ` | 容器默认 | 时区，建议 `Asia/Shanghai` |
 
 ## 挂载说明
