@@ -58,6 +58,21 @@ docker logs nexus 2>&1 | grep 初始口令
 
 只有 `/data` 是必需的。其余挂载（媒体目录 `/m1~m8`、`/mp-config`、`/qb`、`/tr` 等）都取决于你要接入哪些服务，见 `docker-compose.example.yml` 里的注释示例。**不要**直接照搬别人的整套挂载表。
 
+## 站点搜索（PT）
+
+搜索在 NAS 侧完成，浏览器只负责展示。要点：
+
+- **流控**：单站默认 3 秒最小间隔（站点可配 `requestDelay`，设 0 关闭），全局限速令牌桶；遇到 `429` 按 `Retry-After` 给该站冷却，连续失败指数退避（3 秒起、最长 5 分钟）。被流控**主动跳过**的轮次不计入站点健康度，避免"因为自己慢就把站点判死"。
+- **可补救的诊断**：结果上方有站点状态条，每站给出「人话原因 + 证据（状态码 / 最终 URL / 响应片段）+ 一个可执行动作」，并可「重测这站」。诊断码：`dns` `tls` `timeout` `auth` `ratelimit` `challenge` `http` `parse` `api` `throttle-skip` `busy` `disabled` `unknown`。`403` 会先判是不是反爬挑战页、再判是不是登录页——两者补救动作完全不同。
+- **加站两条通路**：① 浏览器插件（见下）；② CookieCloud（`POST /cookiecloud/sync`，同一份数据既刷新 MoviePilot 站点表，也刷新本服务的站点 cookie）。
+- **接口**：`GET /api/search/pt?q=`（响应含 `results` 与 `diag`）、`GET /api/search/pt/sites`（每站 `state/reason/diag/has_cookie`）、`POST /api/search/pt/sites/test`（单站实测）、`POST /api/sites/import`（插件导入，**默认增改不删**，清空需显式 `replace`）。
+
+### 浏览器插件（`nexus-extension/`）
+
+服务端拿不到"已登录浏览器里的 cookie"，也过不了 Cloudflare 挑战。插件补齐这一环：读当前浏览器 cookie → 在真实浏览器里实测一次该站搜索 → 一键推送到 NEXUS（`/api/sites/import`），之后每 30 分钟自动保活（cookie 变了就重推）。
+
+插件是**私有分发**（Chrome/Edge 加载已解压扩展），不进商店：`cookies` 权限上商店会被审核卡住，也更容易被误认为在收集凭据。安装与权限说明见 `nexus-extension/README.md`。
+
 ## 构建与发布
 
 ```bash
@@ -65,12 +80,12 @@ docker logs nexus 2>&1 | grep 初始口令
 docker build \
   --build-arg GIT_REVISION=$(git rev-parse --short HEAD) \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  -t nexus:2.1.0 .
+  -t nexus:2.2.1 .
 
 # 打发布 tag 并推送
-docker tag nexus:2.1.0 bonanzalee/nexus:2.1.0
-docker tag nexus:2.1.0 bonanzalee/nexus:latest
-docker push bonanzalee/nexus:2.1.0
+docker tag nexus:2.2.1 bonanzalee/nexus:2.2.1
+docker tag nexus:2.2.1 bonanzalee/nexus:latest
+docker push bonanzalee/nexus:2.2.1
 docker push bonanzalee/nexus:latest
 ```
 
@@ -78,7 +93,7 @@ docker push bonanzalee/nexus:latest
 
 ## 版本
 
-当前 `2.1.0`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
+当前 `2.2.1`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
 
 ## 安全说明
 
