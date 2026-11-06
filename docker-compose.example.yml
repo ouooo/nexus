@@ -2,7 +2,7 @@
 # 用法：docker compose -f docker-compose.example.yml up -d
 services:
   nexus:
-    image: nexus:2.1.0          # 发布后改为 <registry>/nexus:2.1.0
+    image: bonanzalee/nexus:2.1.0      # 也可用 :latest
     container_name: nexus
     restart: unless-stopped
     ports:
