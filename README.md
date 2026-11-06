@@ -9,11 +9,13 @@
 ## 快速开始
 
 ```bash
+docker pull bonanzalee/nexus:2.1.0
+
 docker run -d --name nexus \
   -p 28081:28080 \
   -v ./data:/data \
   --restart unless-stopped \
-  nexus:2.1.0
+  bonanzalee/nexus:2.1.0
 ```
 
 浏览器打开 `http://<host>:28081/`。首次启动会生成 `config.json`，服务连接、代理、TMDB Key 等均在「设置」页配置。
@@ -39,10 +41,11 @@ docker build \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
   -t nexus:2.1.0 .
 
-# 打发布 tag（Docker Hub + 阿里云 ACR 双推）
-docker tag nexus:2.1.0 <dockerhub-user>/nexus:2.1.0
-docker tag nexus:2.1.0 <dockerhub-user>/nexus:latest
-docker tag nexus:2.1.0 registry.cn-hangzhou.aliyuncs.com/<acr-namespace>/nexus:2.1.0
+# 打发布 tag 并推送
+docker tag nexus:2.1.0 bonanzalee/nexus:2.1.0
+docker tag nexus:2.1.0 bonanzalee/nexus:latest
+docker push bonanzalee/nexus:2.1.0
+docker push bonanzalee/nexus:latest
 ```
 
 `latest` 只跟随最新稳定版本，不跟每次提交。
