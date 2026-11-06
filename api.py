@@ -2071,26 +2071,30 @@ def _pt_search_legacy(query, exclude=''):
     return unique[:100]
 
 
-def pt_search(query, exclude=''):
+def pt_search(query, exclude='', with_stats=False):
     """PT 站并发搜索（声明式站点定义 + 引擎族解析，实现见 search_engine.py）
 
     - 站点定义落在 /data/sites.json（首次自动从 MoviePilot 导入），加站/改站不改代码、不发镜像
     - 引擎族解析（NexusPHP/Unit3D/Gazelle/Discuz/JSON-API/通用）+ 字段多选择器回退 + 锚点兜底
     - 线程池并发 + 单站独立超时 + 单次总预算 + 熔断 + 60s 缓存，慢站不拖累整体
+    - 单站最小间隔 + 全局出站配额 + 429 冷却 + 失败指数退避：不打快，避免站点风控
+    - with_stats=True 额外返回每站诊断：前端用来说明「哪站没搜到、为什么、怎么办」
     """
     if not query:
-        return []
+        return ([], {'used': 0, 'sites': []}) if with_stats else []
     try:
         import search_engine as _se
     except Exception as e:
         _log('ERROR', 'search', 'search_engine 导入失败，回退旧实现: %s' % e)
-        return _pt_search_legacy(query, exclude)
+        res = _pt_search_legacy(query, exclude)
+        return (res, {'used': 0, 'sites': [], 'legacy': True}) if with_stats else res
     try:
         return _se.search_all(query, exclude, mp_db_path=MP_DB, data_dir=DATA_DIR,
-                              proxy_url=_current_proxy_url())
+                              proxy_url=_current_proxy_url(), with_stats=with_stats)
     except Exception as e:
         _log('ERROR', 'search', 'search_engine 执行失败，回退旧实现: %s' % e)
-        return _pt_search_legacy(query, exclude)
+        res = _pt_search_legacy(query, exclude)
+        return (res, {'used': 0, 'sites': [], 'legacy': True}) if with_stats else res
 
 
 def pt_sites_health():
@@ -2102,39 +2106,110 @@ def pt_sites_health():
     return _se.health_snapshot(DATA_DIR, MP_DB)
 
 
+def pt_site_test(site_id, query=''):
+    """单站实测：一次性拿到条目数、耗时、以及结构化诊断（供前端「测试」按钮）"""
+    try:
+        import search_engine as _se
+    except Exception as e:
+        return {'ok': False, 'error': str(e), 'diag': None}
+    items, meta = _se.search_one(site_id, query or 'test', mp_db_path=MP_DB,
+                                 data_dir=DATA_DIR, proxy_url=_current_proxy_url())
+    return {'ok': bool(meta.get('ok')), 'count': meta.get('count', 0), 'ms': meta.get('ms', 0),
+            'error': meta.get('error', ''), 'diag': meta.get('diag'),
+            'sample': [{'title': i.get('title'), 'size': i.get('size')} for i in items[:3]]}
+
+
+def pt_import_sites(payload):
+    """浏览器插件导入：合并站点定义（按 id 覆盖），并把插件实测到的诊断写进健康度"""
+    import search_engine as _se
+    res = pt_save_sites(payload)
+    probes = payload.get('probes') if isinstance(payload, dict) else None
+    if probes:
+        try:
+            health = _se.Health(DATA_DIR)
+            for p in probes:
+                sid = p.get('id')
+                if not sid:
+                    continue
+                d = p.get('diag')
+                if d:
+                    health.record(sid, bool(p.get('ok')), int(p.get('ms') or 0),
+                                  (d.get('label') or ''), d)
+                elif p.get('ok'):
+                    health.record(sid, True, int(p.get('ms') or 0))
+        except Exception as e:
+            _log('WARN', 'search', '导入探针写入失败: %s' % e)
+    _se.reload_sites(DATA_DIR, MP_DB)
+    return res
+
+
 def pt_save_sites(payload):
-    """保存站点定义到 /data/sites.json。payload: {'sites': [...]} 或单个站点对象。"""
+    """保存站点定义到 /data/sites.json。
+
+    语义（重要）：**默认增改，不删**——只提交部分站点时，未提交的站点原样保留。
+      - {'sites': [...]} / 单个站点对象：按 id 合并
+      - {'remove': [id,...]}：显式删除这些站
+      - {'replace': True}：整体替换（危险，必须显式声明）
+    空 payload 直接返回不改盘，避免一次误调用把站点库清空。
+    """
     import search_engine as _se
     store = _se.SiteStore(DATA_DIR)
     store.sites = []
     incoming = payload.get('sites') if isinstance(payload, dict) else None
     if incoming is None:
         incoming = [payload] if isinstance(payload, dict) else []
+    replace = bool(payload.get('replace')) if isinstance(payload, dict) else False
+    remove_ids = set(payload.get('remove') or []) if isinstance(payload, dict) else set()
+    if not incoming and not remove_ids and not replace:
+        return {'saved': 0, 'note': '空载荷，未改动'}
+
     existing = {}
+    order = []
     path = os.path.join(DATA_DIR, _se.SITES_FILE)
     if os.path.exists(path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 for s in (json.load(f).get('sites') or []):
-                    existing[s.get('id')] = s
+                    sid = s.get('id')
+                    if sid and sid not in existing:
+                        existing[sid] = s
+                        order.append(sid)
         except Exception:
             pass
-    saved = []
+    if replace:
+        order = []
+        existing = {}
+
+    merged_map = {sid: existing[sid] for sid in order}
+    incoming_ids = []
     for s in incoming or []:
         if not isinstance(s, dict) or not s.get('base_url'):
             continue
         sid = s.get('id') or _se._site_id(s.get('name') or '', s.get('base_url') or '')
-        merged = dict(existing.get(sid) or {})
+        incoming_ids.append(sid)
+        merged = dict(merged_map.get(sid) or {})
         merged.update(s)
         merged['id'] = sid
         merged.setdefault('name', sid)
         merged.setdefault('engine', 'nexusphp')
         merged.setdefault('enabled', True)
         merged.setdefault('search', {'path': '/torrents.php', 'method': 'GET', 'keywordParam': 'search'})
-        saved.append(merged)
+        if sid not in merged_map:
+            order.append(sid)
+        merged_map[sid] = merged
+
+    for rid in remove_ids:
+        merged_map.pop(rid, None)
+        if rid in order:
+            order.remove(rid)
+
+    saved = [merged_map[sid] for sid in order if sid in merged_map]
+    if not saved and existing:
+        return {'saved': 0, 'error': '拒绝把站点库写成空（如确需清空请传 replace=true）'}
     store.sites = saved
     store.save()
-    return {'saved': len(saved)}
+    return {'saved': len(saved), 'added_or_updated': len(incoming_ids),
+            'kept': max(0, len(existing) - len(incoming_ids))}
 
 def _cjk(s):
     return bool(re.search(r'[\u4e00-\u9fff]', s or ''))
@@ -3551,10 +3626,23 @@ class Handler(BaseHTTPRequestHandler):
             existing.update(cookie_data)
             save_cookies(existing)
             updated = update_mp_sites_from_cookies(cookie_data)
+            # 同一份 CookieCloud 推送也刷进 NEXUS 自己的站点库，搜索立刻用上新登录态
+            sites_updated = 0
+            try:
+                import search_engine as _se
+                r = _se.sync_cookies(cookie_data, DATA_DIR, MP_DB)
+                sites_updated = r.get('updated', 0)
+                if sites_updated:
+                    print('[CookieCloud] 站点库已更新: %s' % '、'.join(r.get('matched') or []), flush=True)
+            except Exception as e:
+                _log('WARN', 'cookiecloud', '站点库同步失败: %s' % e)
             ip = self._get_client_ip()
-            _log('INFO', 'cookiecloud', '同步成功 ip=%s domains=%d mp_updated=%d' % (ip, len(cookie_data), updated))
-            print(f'[CookieCloud] 同步成功 from {ip}: domains={len(cookie_data)} mp_updated={updated}', flush=True)
-            self.send_json({'success': True, 'domains': len(cookie_data), 'mp_updated': updated})
+            _log('INFO', 'cookiecloud', '同步成功 ip=%s domains=%d mp_updated=%d sites_updated=%d'
+                 % (ip, len(cookie_data), updated, sites_updated))
+            print(f'[CookieCloud] 同步成功 from {ip}: domains={len(cookie_data)} '
+                  f'mp_updated={updated} sites_updated={sites_updated}', flush=True)
+            self.send_json({'success': True, 'domains': len(cookie_data), 'mp_updated': updated,
+                            'sites_updated': sites_updated})
         elif path.startswith('/api/journey/claim'):
             s = self._require_auth()
             if not s:
@@ -3700,8 +3788,55 @@ class Handler(BaseHTTPRequestHandler):
                 favs = [f for f in favs if f.get('id') != fid]
                 save_favs(favs)
             self.send_json({'ok': True, 'favorites': favs})
+        elif path == '/api/sites/import':
+            # 浏览器插件一键导入：站点定义 + 插件实测探针（需 settings:manage）
+            s = self._require_auth()
+            if not s:
+                self.send_json({'error': '未授权'}, code=401)
+                return
+            role = s.get('role', 'admin')
+            if not _has_perm(get_role(role)['permissions'], 'settings:manage'):
+                self.send_json({'error': '无权限导入站点'}, code=403)
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode('utf-8') if length else '{}'
+            try:
+                data = json.loads(body)
+            except Exception:
+                self.send_json({'error': '无效请求'}, code=400)
+                return
+            try:
+                res = pt_import_sites(data)
+                self.send_json({'ok': True, **res})
+            except Exception as e:
+                self.send_json({'error': '导入失败: %s' % e}, code=500)
+
+        elif path == '/api/search/pt/sites/test':
+            # 单站实测：拿诊断结果（不改站点配置）
+            s = self._require_auth()
+            if not s:
+                self.send_json({'error': '未授权'}, code=401)
+                return
+            role = s.get('role', 'admin')
+            if not _has_perm(get_role(role)['permissions'], 'search'):
+                self.send_json({'error': '无权限测试站点'}, code=403)
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode('utf-8') if length else '{}'
+            try:
+                data = json.loads(body)
+            except Exception:
+                data = {}
+            sid = (data.get('id') or '').strip()
+            if not sid:
+                self.send_json({'error': '缺少站点 id'}, code=400)
+                return
+            try:
+                self.send_json(pt_site_test(sid, data.get('q') or ''))
+            except Exception as e:
+                self.send_json({'error': '测试失败: %s' % e}, code=500)
+
         elif path == '/api/search/pt/sites':
-            # 站点定义保存（写）：settings:manage 权限；cookie 不回显
             s = self._require_auth()
             if not s:
                 self.send_json({'error': '未授权'}, code=401)
@@ -4193,8 +4328,8 @@ class Handler(BaseHTTPRequestHandler):
             if not q:
                 self.send_json({'results': []})
             else:
-                results = pt_search(q, ex)
-                self.send_json({'results': results})
+                results, stats = pt_search(q, ex, with_stats=True)
+                self.send_json({'results': results, 'diag': stats})
 
         elif path == '/api/search/pt/sites':
             # 站点清单一览 + 健康度（不含 cookie）
