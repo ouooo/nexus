@@ -2082,9 +2082,9 @@
 #ptSitesCard .pt-sum { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:10px; }
 #ptSitesCard .pt-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px;
   border-radius:var(--radius-xs); background:var(--glass-strong); color:var(--c-text-mid); font-size:11px; }
-#ptSitesCard .pt-chip.ok { color:#30D158; }
-#ptSitesCard .pt-chip.warn { color:#FFD60A; }
-#ptSitesCard .pt-chip.bad { color:#FF453A; }
+#ptSitesCard .pt-chip.ok { color:var(--c-success); }
+#ptSitesCard .pt-chip.warn { color:var(--c-fav); }
+#ptSitesCard .pt-chip.bad { color:var(--c-danger); }
 #ptSitesCard .pt-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
 #ptSitesCard .pt-search { flex:1 1 180px; min-width:140px; height:32px; padding:0 10px;
   border-radius:var(--radius-sm); border:1px solid var(--border-hi); background:var(--field-bg);
@@ -2094,18 +2094,18 @@
   border:1px solid var(--border-hi); background:var(--glass-hover); color:var(--c-text-hi);
   font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
 #ptSitesCard .pt-btn:hover { background:var(--glass-strong); }
-#ptSitesCard .pt-btn.primary { background:#fff; color:#0a0a0a; border-color:transparent; }
-#ptSitesCard .pt-btn.danger { border-color:rgba(255,69,58,0.25); background:rgba(255,69,58,0.12); color:#FF6B60; }
-#ptSitesCard .pt-btn.danger:hover { background:rgba(255,69,58,0.22); }
+#ptSitesCard .pt-btn.primary { background:#fff; color:#0a0a0c; border-color:transparent; }
+#ptSitesCard .pt-btn.danger { border-color:rgba(255,59,48,0.25); background:rgba(255,59,48,0.12); color:var(--c-danger); }
+#ptSitesCard .pt-btn.danger:hover { background:rgba(255,59,48,0.2); }
 #ptSitesCard .pt-row { display:flex; align-items:center; gap:10px; padding:10px 12px;
   background:var(--glass-faint); border:1px solid var(--border-lo); border-radius:var(--radius-md); }
 #ptSitesCard .pt-list { display:grid; gap:8px; }
 #ptSitesCard .pt-dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto; background:var(--c-text-low); }
-#ptSitesCard .pt-dot.ok { background:#30D158; }
-#ptSitesCard .pt-dot.warn { background:#FFD60A; }
-#ptSitesCard .pt-dot.cool { background:#FF9F0A; }
+#ptSitesCard .pt-dot.ok { background:var(--c-success); }
+#ptSitesCard .pt-dot.warn { background:var(--c-fav); }
+#ptSitesCard .pt-dot.cool { background:var(--c-warning); }
 #ptSitesCard .pt-dot.off { background:var(--c-text-low); opacity:.5; }
-#ptSitesCard .pt-dot.bad { background:#FF453A; }
+#ptSitesCard .pt-dot.bad { background:var(--c-danger); }
 #ptSitesCard .pt-main { flex:1 1 auto; min-width:0; }
 #ptSitesCard .pt-name { color:var(--c-text-hi); font-size:13px; font-weight:600; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; }
@@ -2114,7 +2114,7 @@
 #ptSitesCard .pt-reason { color:var(--c-text-mid); font-size:11.5px; line-height:1.5; margin-top:2px; }
 #ptSitesCard .pt-ops { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
 #ptSitesCard .pt-ops .pt-btn { height:26px; padding:0 9px; font-size:11px; }
-#ptSitesCard .pt-form { padding:12px; border-radius:var(--radius-md); background:rgba(255,255,255,0.04);
+#ptSitesCard .pt-form { padding:12px; border-radius:var(--radius-md); background:var(--glass-faint);
   border:1px solid var(--border-lo); display:grid; gap:10px; }
 #ptSitesCard .pt-form .f-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
 #ptSitesCard .pt-form label { display:block; font-size:11px; color:var(--c-text-low); margin-bottom:4px; }
@@ -2122,11 +2122,17 @@
   width:100%; height:32px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border-hi);
   background:var(--field-bg); color:var(--c-text-hi); font-size:12.5px; box-sizing:border-box; outline:none; }
 #ptSitesCard .pt-form select { appearance:none; -webkit-appearance:none; padding-right:28px;
-  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888888' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c9c9c9' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat; background-position:right 10px center; background-color:var(--field-bg); cursor:pointer; }
 #ptSitesCard .pt-form textarea { height:56px; padding:7px 10px; resize:vertical;
   font-family:var(--font-mono,monospace); }
 #ptSitesCard .pt-form .f-ops { display:flex; gap:8px; justify-content:flex-end; }
+#ptSitesCard .pt-form .f-chk { display:flex; align-items:center; gap:9px; min-height:24px; }
+/* 表单里的 input 统一 32px 高，勾选框要还原全局 18px 方框外观 */
+#ptSitesCard .pt-form .f-chk input[type="checkbox"] { width:18px; height:18px; padding:0; flex:none;
+  border:1.5px solid rgba(255,255,255,0.3); border-radius:6px; background:rgba(255,255,255,0.06); }
+#ptSitesCard .pt-form .f-chk input[type="checkbox"]:checked { background:var(--c-success); border-color:var(--c-success); }
+#ptSitesCard .pt-form .f-chk span { font-size:12px; color:var(--c-text-mid); }
 #ptSitesCard .pt-empty { padding:14px 0; color:var(--c-text-low); font-size:12.5px; }
   #mediaTypeBar { margin-top:12px; }
   /* chips 行距按底板高度（chip 高约 27px）而非文案高度计算；分类/排序等带底板标签各自独立一行，
@@ -2453,7 +2459,7 @@
       <button id="btnLogoutDesktop" title="退出登录" style="background:rgba(255,100,100,0.12);border:1px solid rgba(255,100,100,0.28);color:rgba(255,138,128,0.92);cursor:pointer;font-size:11px;padding:4px 10px;border-radius:8px;display:flex;align-items:center;gap:4px;">🚪 退出</button>
     </div>
 
-    <div class="side-ver"><span>v2.2.2 · 局域网</span></div>
+    <div class="side-ver"><span>v2.2.3 · 局域网</span></div>
   </aside>
 
   <!-- 移动端底部吸底 TabBar(窄屏显示) -->
@@ -6964,6 +6970,8 @@ function _siteSub(s) {
   if (s.engine) parts.push(s.engine);
   parts.push((s.requestDelay ? s.requestDelay : 0) + 's 间隔');
   parts.push(s.has_cookie ? '有 cookie' : '无 cookie');
+  if (s.insecure) parts.push('跳过证书校验');
+  if (s.timeout && Math.abs(Number(s.timeout) - 3.5) > 0.01) parts.push(Number(s.timeout) + 's 超时');
   if (s.state === 'cool' && s.cooldown_until) {
     var left = Math.max(0, Math.round((s.cooldown_until - Date.now() / 1000) / 60));
     if (left) parts.push('冷却 ' + left + ' 分钟');
@@ -6991,7 +6999,7 @@ function paintPtSites() {
       + (coolN ? '<span class="pt-chip warn">' + coolN + ' 冷却中</span>' : '')
       + (offN ? '<span class="pt-chip">' + offN + ' 已停用</span>' : '')
       + (noCk ? '<span class="pt-chip warn">' + noCk + ' 站无 cookie</span>' : '')
-      + '<span class="pt-chip"><span onclick="loadPtSites()" style="cursor:pointer;">刷新状态</span></span>';
+      + '<span class="pt-chip" style="cursor:pointer;" onclick="loadPtSites()" title="重新拉取站点状态（不打站点）">刷新状态</span>';
   }
 
   var kw = (window._ptSiteKw || '').trim().toLowerCase();
@@ -7011,7 +7019,11 @@ function paintPtSites() {
 
   var body = '';
   if (_ptEditing === '__new__') body += siteFormHtml(null);
-  shown.forEach(function(s) {
+  // 站点库动辄 40+ 站：默认只铺一屏，其余折叠，避免设置页被拉成几千像素；筛选时不折叠
+  var cap = (kw || window._ptExpand) ? shown.length : Math.min(shown.length, 12);
+  if (_ptEditing && _ptEditing !== '__new__') cap = shown.length;  // 编辑态必须让该站与表单同屏
+  var folded = shown.length - cap;
+  shown.slice(0, cap).forEach(function(s) {
     body += '<div class="pt-row">'
       + '<label style="display:flex;align-items:center;gap:6px;flex:0 0 auto;" title="' + (s.enabled ? '已启用，点击停用' : '已停用，点击启用') + '">'
       + '<input type="checkbox" class="tgl" ' + (s.enabled ? 'checked' : '') + ' onchange="toggleSiteEnabled(\'' + esc(s.id) + '\',this.checked)">'
@@ -7030,6 +7042,11 @@ function paintPtSites() {
     if (_ptEditing === s.id) body += siteFormHtml(s);
   });
   if (!shown.length) body = '<div class="pt-empty">没有匹配的站点。可点右上角「＋ 添加站点」，或由浏览器插件一键导入。</div>';
+  if (folded > 0) {
+    body += '<span class="pt-chip" style="cursor:pointer;justify-self:start;" onclick="window._ptExpand=true;paintPtSites()">还有 ' + folded + ' 站 · 展开全部</span>';
+  } else if (window._ptExpand && shown.length > 12) {
+    body += '<span class="pt-chip" style="cursor:pointer;justify-self:start;" onclick="window._ptExpand=false;paintPtSites()">收起</span>';
+  }
   host.innerHTML = body;
 }
 
@@ -7051,6 +7068,11 @@ function siteFormHtml(s) {
     + '<div><label>搜索路径</label><input data-f="search_path" value="' + esc(search.path || '/torrents.php') + '" placeholder="/torrents.php"></div>'
     + '<div><label>关键词参数</label><input data-f="search_kw" value="' + esc(search.keywordParam || 'search') + '" placeholder="search"></div>'
     + '<div><label>该站最小间隔（秒，0=关闭）</label><input data-f="requestDelay" type="number" min="0" step="0.5" value="' + esc(String((s && s.requestDelay) != null ? s.requestDelay : 3)) + '"></div>'
+    + '<div><label>超时（秒，0=跟随全局 3.5）</label><input data-f="timeout" type="number" min="0" step="0.5" value="' + esc(String((s && s.timeout) != null ? s.timeout : 3.5)) + '"></div>'
+    + '</div>'
+    + '<div class="f-chk">'
+    + '<input type="checkbox" data-f="insecure"' + ((s && s.insecure) ? ' checked' : '') + '>'
+    + '<span>允许自签名证书（站点证书过期或自签时打开，等于跳过证书校验）</span>'
     + '</div>'
     + '<div><label>Cookie（' + (isNew ? '可选，需登录态的站点才填' : '留空保持不变；填入则覆盖') + '）</label><textarea data-f="cookie" placeholder="uid=…; passkey=…（不要贴到公开场合）"></textarea></div>'
     + '<div class="f-ops">'
@@ -7072,17 +7094,26 @@ async function saveSiteForm(id) {
   var form = document.querySelector('#ptSitesCard .pt-form[data-form="' + id + '"]');
   if (!form) return;
   var val = function(k) { var el = form.querySelector('[data-f="' + k + '"]'); return el ? el.value.trim() : ''; };
+  var orig = null;
+  if (id !== '__new__') {
+    for (var i = 0; i < _ptSites.length; i++) { if (_ptSites[i].id === id) { orig = _ptSites[i]; break; } }
+  }
   var obj = {
     name: val('name'),
     base_url: val('base_url'),
     engine: val('engine') || 'nexusphp',
     requestDelay: Number(val('requestDelay') || 0),
-    search: {
-      path: val('search_path') || '/torrents.php',
-      method: 'GET',
-      keywordParam: val('search_kw') || 'search'
-    }
+    timeout: Number(val('timeout') || 0),
+    insecure: !!form.querySelector('[data-f="insecure"]').checked,
+    search: {}
   };
+  // search 走局部合并：只提交用户真正改过的键，避免把该站已有的 method/paths/params 冲掉
+  var path = val('search_path') || '/torrents.php';
+  var kw = val('search_kw') || 'search';
+  if (!orig || path !== String((orig.search || {}).path || '/torrents.php')) obj.search.path = path;
+  if (!orig || kw !== String((orig.search || {}).keywordParam || 'search')) obj.search.keywordParam = kw;
+  if (!orig) obj.search.method = 'GET';
+  if (!obj.search.path && !obj.search.keywordParam && !obj.search.method) delete obj.search;
   if (!obj.name) { toast('站点名称不能为空', 'error'); return; }
   if (!obj.base_url) { toast('站点地址不能为空', 'error'); return; }
   if (id !== '__new__') obj.id = id;
@@ -10337,7 +10368,7 @@ var HELP_DB = {
   trend: { t: '流行趋势数据源', d: '勾选需要在「流行趋势」页展示的来源（如豆瓣热门电影/电视），可多选；保存后生效。' },
   devTitle: { t: '服务分类名称', d: '服务页按设备分组展示服务卡，分组标题默认是「SA 服务」「DS 服务」这类「设备名 + 服务」的形式。在这里给每个设备填一个自己的显示名（例如「主力 NAS」「备份机」），服务页标题与服务编辑里的「所属设备」下拉都会跟着变。留空则回到默认名称；设备标识本身不变，端口与健康检查完全不受影响。' },
   cc: { t: 'CookieCloud', d: 'CookieCloud 用于把浏览器 Cookie 端到端加密同步到 NEXUS。NEXUS 只需配置「服务器地址 + 端到端加密密码」：插件端与 NEXUS 使用同一套 UUID 与密码即可（UUID 只需在插件端生成并保持一致）。工作模式、加密算法、Cookie 过期时间等由浏览器插件端控制，NEXUS 侧无需重复配置。' },
-  ptSites: { t: '站点搜索', d: 'NEXUS 的 PT 站点搜索源。站点库支持启用/停用、单站重测、编辑与删除；每站有独立的请求间隔（默认 3 秒，0 关闭）与全局限速，避免短时间内反复请求被站点风控。搜索失败时按原因给结论：cookie 失效→去站点重新登录后由浏览器插件或 CookieCloud 推回；被限速→停一会儿再试；挑战页→站点开了人机验证，需浏览器过验证后重推 cookie；网络不通→检查代理与 DNS。' }
+  ptSites: { t: '站点搜索', d: 'NEXUS 的 PT 站点搜索源。站点库支持启用/停用、单站重测、编辑与删除；每站有独立的请求间隔（默认 3 秒，0 关闭）、独立超时（默认跟随全局 3.5 秒）与全局限速，避免短时间内反复请求被站点风控。有些老站证书过期或自签，编辑里勾选「允许自签名证书」即可跳过校验。搜索失败时按原因给结论：cookie 失效→去站点重新登录后由浏览器插件或 CookieCloud 推回；被限速→调大该站间隔或等冷却结束；挑战页→站点开了人机验证，需浏览器过验证后重推 cookie；网络不通→检查代理与 DNS。' }
 };
 var _helpIconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg>';
 function openHint(key, anchor) {
