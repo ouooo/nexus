@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.5 — 2026-11-07
+
+安全加固 + 两处排版修正。
+
+### 安全
+- **站点 cookie 落盘加密**：`sites.json` 里的 cookie 不再明文。落盘形态 `v1:<base64>`，构造为「HMAC-SHA256 计数器流加密 + encrypt-then-MAC」（标准库没有 AES-GCM，所以用标准原语自己拼 AEAD 语义：每条记录 16B 随机 nonce，先加密再对 `nonce||密文` 算 MAC，校验用 `compare_digest`）。主密钥单独存 `.vault_key`（32B、chmod 600），不进 `sites.json`；`sites.json` 也收到 600。密钥被替换或密文被改动时解密失败，该站按「没有 cookie」处理（宁可当成未登录，也不带病请求站点）。
+- **插件令牌短时效 + 可撤销**：登录时带 `X-Nexus-Client: extension` 的外部客户端只拿 **7 天**令牌（网页仍是 30 天），仍按使用滑动续期。新增 `GET /api/sessions`、`POST /api/sessions/revoke`，设置 → 鉴权 多了「🔑 已授权客户端」卡片，能看每个客户端的类型/最近使用/到期时间并单条撤销；列表只给会话 id（token 的 sha256 前 12 位），从不回显令牌本身。
+- **写端点来源网段校验**：`/api/sites/import` 与 `/cookiecloud/sync` 只接受内网来源（本机、RFC1918、Tailscale `100.64/10`、IPv6 ULA）；来源不在白名单直接 403 并说清怎么放行。白名单可用 `DASH_WRITE_ALLOW_CIDRS` 环境变量或 `config.json` 的 `security.write_allow_cidrs` 覆盖（`*` = 全放行）。反代场景下 `_get_client_ip` 会认 `X-Forwarded-For` 第一跳（仅当直连方是本机时）。
+- **原生 HTTPS**：设 `DASH_TLS_CERT` / `DASH_TLS_KEY`（或 `config.json` 的 `tls.cert/key`）即由服务自己终止 TLS（TLS1.2+），不必再在容器外挂一层反代。证书缺失/加载失败会打 `[CRITICAL]` 并回退 HTTP，不会起不来。
+- **CORS 收紧**：响应头不再硬写 `Access-Control-Allow-Origin: *`，只回同源与浏览器扩展来源（`chrome-extension://` / `moz-extension://`），避免任意网页借用户已登录的会话读数据。
+
+### 界面
+- **页面标题回到 Title 1**：`.top-title h1` 17px → 28px。原来它比分组标题 `h3`(18px) 还小，层级是反的（平板断点里的 `h1{28px}` 反而一直生效，只有桌面小）。顶部图标同步 17→24px。
+- **模块间距统一到 28px 节奏**：`.top-row` 底边距 16px → 28px（它原来是唯一一档 16px 的“顶栏专用”间距，与其它模块不一致）；宽屏单列布局里 `.overview-grid .hero-media` 22px → 28px、`.overview-grid .section-title` 12px → 16px。现在「顶栏 → 轮播 → 分组标题 → 卡片」是 28 / 28 / 16，分组标题与它下方内容的 16px 属于标题内部间距，不参与模块节奏。
+
 ## 2.2.4 — 2026-11-07
 
 ### 修复
