@@ -2,6 +2,27 @@
 
 ## 2.2.9 — 2026-11-07
 
+### 插件导入：双端都有回执（NEXUS 端）
+- `pt_import_sites()` 结束时报一次回执：新增 `_record_import_receipt()` 把 `{at, client, added, updated, saved, probe_ok, probe_bad, names}` 写进 `config.json` 的 `last_site_import`（`_atomic_write` 后重载 `CONFIG`）。
+- `pt_save_sites()` 返回值拆成 `{saved, added, updated, added_or_updated, kept}`，前端能分清「新增」与「更新」。
+- GET `/api/config` 输出 `last_site_import`（与 `trend_sources` 同级）。
+- 设置 → 服务与连接 → 站点搜索卡顶部新增一行 `.pt-import` 回执：`插件导入 · 新增 n 站 / 无新增 · 更新 n 站 · MM-DD HH:MM · n 站实测正常`，红点表示有站点实测失败；5 分钟内且本页未弹过时再补一条 toast。
+- 前端读的是 `/api/config`（`window._ptImportCfg` 缓存），不是页面里的 `CONFIG` 常量 —— `CONFIG` 里没有这个字段，首版因此一直隐藏。
+
+### 新增端点 `POST /api/sites/cookie-sync`（插件专用通道）
+- 入参 `{cookie_data:{domain:[...]}, client}`，走 bearer 令牌 + `settings:manage` 权限，**绕开 `/cookiecloud/sync` 在 CookieCloud 密码为空时必然 401 的死结**。
+- 逐域清洗（`len>=10`、剥 `www.`、截 120 字符）后合并进本站 `cookies.json`，同时 `update_mp_sites_from_cookies()` 写 MoviePilot 的 `site.cookie`，再 `search_engine.sync_cookies()` 刷站点库。
+- 返回 `{ok, domains, mp_updated, sites_updated, matched[:12]}`，插件据此显示「NEXUS 站点库更新 n 个 / MP 更新 n 个」。
+- `PATH_PERM` 补一条 `'/api/sites/cookie-sync': 'settings:manage'`。
+
+### 浏览器插件 1.2.0：对标 PTD 的全量识别 + 双端反馈
+- `manifest.json` 版本 `1.1.1 → 1.2.0`，描述加上「已打开站点批量识别 / NEXUS / CookieCloud / MP」。
+- `background.js` 新增 `scanOpenSites()`：枚举浏览器所有标签页 → 按域名去重 → 拿 NEXUS 站点库当已知域名白名单 → 逐站读 cookie → 豆瓣单独归 `douban` 只投喂 cookie → **未知域名打一次 `probeSite(base,{query:'test'})`，真出结果才算 PT 站**（不硬编码站点规则，与 PTD 同思路）→ `SCAN_MAX`/`SCAN_GAP` 限流 → `pushCookieData()` 推新端点 + 新站 `pushSites()` → 汇总 `summary` 并 `saveCfg({lastScan})`。
+- `background.js` 新增 `pushCookieData()`（打 `/api/sites/cookie-sync`，带 `X-Nexus-Client: extension`）；`pushSites()` 同样带上 client 标识。
+- `popup.html` 新增结论条 `#banner` 与按钮「扫描已打开的站点并同步」。
+- `popup.js` 重写：每个按钮都有载入态、成功/失败结论条与日志，推送后显示「NEXUS 已收到：新增 n 站 / 更新 n 站」。
+- 四档图标（16/32/48/128）与 `icon256.png` 统一重绘为「白底圆角瓦片 + 站内 favicon 四角星」，不再出现灰底白「N」方块。
+
 ### 搜索浮层：加筛选与排序（与主搜索页同一套口径）
 - 翻转卡「搜索」三选浮层（网盘搜索 / 在线观影 / 站点搜索）出结果后，结果区上方新增筛选与排序两行 chip。
 - **与主搜索页 `#ptFilterBar` 共用同一份配置与同一份实现**：`SEARCH_FILTER_CONFIG` 提供筛选项与排序项，`applySearchFilterSort()` 提供筛选/排序逻辑，浮层与主搜索页不再各写一套。

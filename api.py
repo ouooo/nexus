@@ -881,6 +881,7 @@ PATH_PERM = {
     '/api/restart': 'settings:manage',
     '/api/sessions': 'settings',
     '/api/sessions/revoke': 'settings:manage',
+    '/api/sites/cookie-sync': 'settings:manage',
 }
 
 def endpoint_perm(path):
@@ -2204,7 +2205,11 @@ def pt_site_test(site_id, query=''):
 
 
 def pt_import_sites(payload):
-    """浏览器插件导入：合并站点定义（按 id 覆盖），并把插件实测到的诊断写进健康度"""
+    """浏览器插件导入：合并站点定义（按 id 覆盖），并把插件实测到的诊断写进健康度
+
+    另外在 config.json 里留一条 last_site_import 回执（时间/新增/更新/探针结果），
+    让 NEXUS 前端能显示「插件刚导入了什么」——插件端与网页端都要有反馈。
+    """
     import search_engine as _se
     res = pt_save_sites(payload)
     probes = payload.get('probes') if isinstance(payload, dict) else None
@@ -2224,7 +2229,46 @@ def pt_import_sites(payload):
         except Exception as e:
             _log('WARN', 'search', '导入探针写入失败: %s' % e)
     _se.reload_sites(DATA_DIR, MP_DB)
+    try:
+        _record_import_receipt(payload, res, probes)
+    except Exception as e:
+        _log('WARN', 'search', '导入回执写入失败: %s' % e)
     return res
+
+
+def _record_import_receipt(payload, res, probes):
+    """把「谁、什么时候、导入了什么」写进 config.json 的 last_site_import。
+
+    前端设置页读它显示一行回执；插件失败的站也记下来，用户能知道哪几站还要重登。
+    """
+    okN = sum(1 for p in (probes or []) if isinstance(p, dict) and p.get('ok'))
+    bad = [{'id': p.get('id'), 'label': ((p.get('diag') or {}).get('label') or '失败')}
+           for p in (probes or []) if isinstance(p, dict) and not p.get('ok')]
+    names = []
+    for s in (payload.get('sites') or []) if isinstance(payload, dict) else []:
+        if isinstance(s, dict) and s.get('name'):
+            names.append(str(s['name'])[:24])
+    receipt = {
+        'at': int(time.time()),
+        'client': str(payload.get('client') or 'extension')[:24] if isinstance(payload, dict) else 'extension',
+        'added': int(res.get('added') or 0),
+        'updated': int(res.get('updated') or 0),
+        'saved': int(res.get('saved') or 0),
+        'probe_ok': okN,
+        'probe_bad': bad[:8],
+        'names': names[:8],
+    }
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+    except Exception:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    raw['last_site_import'] = receipt
+    _atomic_write(CONFIG_PATH, raw, indent=2)
+    global CONFIG
+    CONFIG = load_config()
 
 
 def pt_save_sites(payload):
@@ -2270,10 +2314,13 @@ def pt_save_sites(payload):
 
     merged_map = {sid: existing[sid] for sid in order}
     incoming_ids = []
+    added_ids = []
+    updated_ids = []
     for s in incoming or []:
         if not isinstance(s, dict):
             continue
         sid = s.get('id')
+        is_new = False
         # 已有站点允许「局部更新」（只带 id + 要改的字段，例如只切启用开关）；
         # 新站点必须带 base_url，否则地址无从确定，跳过而不是写脏数据。
         if sid and sid in existing:
@@ -2281,12 +2328,14 @@ def pt_save_sites(payload):
             merged.update(s)
         elif s.get('base_url'):
             sid = sid or _se._site_id(s.get('name') or '', s.get('base_url') or '')
+            is_new = sid not in existing
             merged = dict(merged_map.get(sid) or {})
             merged.update(s)
         else:
             continue
         if not sid:
             continue
+        (added_ids if is_new else updated_ids).append(sid)
         # search 为局部合并：前端只改 path/method/keywordParam 时，
         # 不能把该站已有的 paths/params/advance/body 等规则一并冲掉。
         old = dict(merged_map.get(sid) or {})
@@ -2318,7 +2367,8 @@ def pt_save_sites(payload):
         _se.reload_sites(DATA_DIR, MP_DB)   # 立即让运行中的引擎看到新库，不必重启
     except Exception as e:
         _log('WARN', 'search', '站点库重载失败: %s' % e)
-    return {'saved': len(saved), 'added_or_updated': len(incoming_ids),
+    return {'saved': len(saved), 'added': len(added_ids), 'updated': len(updated_ids),
+            'added_or_updated': len(incoming_ids),
             'kept': max(0, len(existing) - len(incoming_ids))}
 
 def _cjk(s):
@@ -3989,6 +4039,64 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({'error': '导入失败: %s' % e}, code=500)
 
+        elif path == '/api/sites/cookie-sync':
+            # 浏览器插件「扫描所有已打开站点」后批量投喂登录态：
+            # 一次请求同时刷 NEXUS 站点库（_se.sync_cookies）与 MoviePilot site 表，
+            # 与 /cookiecloud/sync 走同一套合并逻辑，但用 bearer 认证，插件不必持有 CookieCloud 密码。
+            if not self._write_guard('/api/sites/cookie-sync'):
+                return
+            s = self._require_auth()
+            if not s:
+                self.send_json({'error': '未授权'}, code=401)
+                return
+            role = s.get('role', 'admin')
+            if not _has_perm(get_role(role)['permissions'], 'settings:manage'):
+                self.send_json({'error': '无权限同步登录态'}, code=403)
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode('utf-8', errors='ignore') if length else '{}'
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            cookie_data = data.get('cookie_data') if isinstance(data, dict) else None
+            if not isinstance(cookie_data, dict) or not cookie_data:
+                self.send_json({'ok': False, 'error': 'cookie_data 为空'}, code=400)
+                return
+            clean = {}
+            for dom, cks in cookie_data.items():
+                if not isinstance(cks, (list, str)):
+                    continue
+                if isinstance(cks, str):
+                    cs = cks.strip()
+                else:
+                    cs = '; '.join([c if isinstance(c, str)
+                                    else str(c.get('name') or '') + '=' + str(c.get('value') or '')
+                                    for c in cks if isinstance(c, (str, dict))])
+                cs = cs.strip().strip(';')
+                if len(cs) < 10:
+                    continue
+                clean[str(dom).replace('www.', '')[:120]] = cs
+            if not clean:
+                self.send_json({'ok': False, 'error': '没有可用的 cookie（都太短或为空）'}, code=400)
+                return
+            existing = load_cookies()
+            existing.update(clean)
+            save_cookies(existing)
+            mp_updated = update_mp_sites_from_cookies(clean)
+            sites_updated, matched = 0, []
+            try:
+                import search_engine as _se
+                r = _se.sync_cookies(clean, DATA_DIR, MP_DB)
+                sites_updated = int(r.get('updated') or 0)
+                matched = (r.get('matched') or [])[:12]
+            except Exception as e:
+                _log('WARN', 'search', '插件批量同步刷站点库失败: %s' % e)
+            _log('INFO', 'search', '插件批量同步 domains=%d mp_updated=%d sites_updated=%d by=%s'
+                 % (len(clean), mp_updated, sites_updated, s.get('username', '')))
+            self.send_json({'ok': True, 'domains': len(clean), 'mp_updated': mp_updated,
+                            'sites_updated': sites_updated, 'matched': matched})
+
         elif path == '/api/search/pt/sites/test':
             # 单站实测：拿诊断结果（不改站点配置）
             s = self._require_auth()
@@ -4734,6 +4842,7 @@ class Handler(BaseHTTPRequestHandler):
                     if 'features' in raw:
                         cfg_out['features'] = raw['features']
                     cfg_out['trend_sources'] = raw.get('trend_sources', {})
+                    cfg_out['last_site_import'] = raw.get('last_site_import', {}) or {}
                     cfg_out['volume_aliases'] = raw.get('volume_aliases', {})
                     cfg_out['journey'] = raw.get('journey', {}) or {}
                     cfg_out['storage'] = raw.get('storage', {})
