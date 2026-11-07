@@ -332,6 +332,7 @@ def load_config():
         'device_titles': {},
         'ui_health_hidden': [],
         'ui_svc_hidden': [],
+        'ui_pt_hidden': [],
         'ui_health_flex': True,
         'ui_health_net_min': 244,
         'ui_health_net_max': 276,
@@ -375,6 +376,7 @@ def load_config():
         cfg['device_titles'] = file_cfg.get('device_titles', {}) or {}
         cfg['ui_health_hidden'] = file_cfg.get('ui_health_hidden', []) or []
         cfg['ui_svc_hidden'] = file_cfg.get('ui_svc_hidden', []) or []
+        cfg['ui_pt_hidden'] = file_cfg.get('ui_pt_hidden', []) or []
         cfg['ui_health_flex'] = file_cfg.get('ui_health_flex', True)
         cfg['ui_health_net_min'] = int(file_cfg.get('ui_health_net_min', 244) or 244)
         cfg['ui_health_net_max'] = int(file_cfg.get('ui_health_net_max', 276) or 276)
@@ -4741,6 +4743,7 @@ class Handler(BaseHTTPRequestHandler):
                     cfg_out['device_titles'] = raw.get('device_titles', {}) or {}
                     cfg_out['ui_health_hidden'] = raw.get('ui_health_hidden', []) or []
                     cfg_out['ui_svc_hidden'] = raw.get('ui_svc_hidden', []) or []
+                    cfg_out['ui_pt_hidden'] = raw.get('ui_pt_hidden', []) or []
                     cfg_out['ui_health_flex'] = raw.get('ui_health_flex', True)
                     cfg_out['ui_health_net_min'] = int(raw.get('ui_health_net_min', 244) or 244)
                     cfg_out['ui_health_net_max'] = int(raw.get('ui_health_net_max', 276) or 276)
@@ -4991,6 +4994,8 @@ class Handler(BaseHTTPRequestHandler):
                 raw['ui_health_hidden'] = data['ui_health_hidden']
             if 'ui_svc_hidden' in data and isinstance(data['ui_svc_hidden'], list):
                 raw['ui_svc_hidden'] = data['ui_svc_hidden']
+            if 'ui_pt_hidden' in data and isinstance(data['ui_pt_hidden'], list):
+                raw['ui_pt_hidden'] = [str(x)[:80] for x in data['ui_pt_hidden']][:200]
             if 'ui_health_flex' in data:
                 raw['ui_health_flex'] = bool(data['ui_health_flex'])
             if 'ui_health_net_min' in data:
