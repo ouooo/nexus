@@ -2130,6 +2130,11 @@
 #ptSitesCard .pt-chip.ok { color:var(--c-success); }
 #ptSitesCard .pt-chip.warn { color:var(--c-fav); }
 #ptSitesCard .pt-chip.bad { color:var(--c-danger); }
+/* 插件导入回执：一句话说明「什么时候、哪几站、结果如何」，插件端推完这里立刻能对上 */
+#ptSitesCard .pt-import { display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+  margin:0 0 8px; font-size:11px; color:var(--c-text-low); }
+#ptSitesCard .pt-import .dot { width:6px; height:6px; border-radius:50%; background:var(--c-success); flex:none; }
+#ptSitesCard .pt-import .dot.warn { background:var(--c-fav); }
 #ptSitesCard .pt-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
 #ptSitesCard .pt-search { flex:1 1 180px; min-width:140px; height:32px; padding:0 10px;
   border-radius:var(--radius-sm); border:1px solid var(--border-hi); background:var(--field-bg);
@@ -3536,6 +3541,7 @@
             <button class="svc-add-corner" onclick="openSiteForm('__new__')">＋ 添加站点</button>
           </div>
         </div>
+        <div id="ptSitesImport" class="pt-import" hidden></div>
         <div id="ptSitesSummary" class="pt-sum"><span class="pt-chip">载入中…</span></div>
         <div class="pt-tools">
           <input id="ptSiteKw" class="pt-search" placeholder="按名称或域名筛选" oninput="window._ptSiteKw=this.value;paintPtSites()">
@@ -7372,6 +7378,7 @@ function gotoSiteManager() {
 async function loadPtSites() {
   var sum = document.getElementById('ptSitesSummary');
   if (sum) sum.innerHTML = '<span class="pt-chip">载入中…</span>';
+  window._ptImportCfg = null;   // 重拉站点时顺带重读回执，插件刚推过来的能立刻看到
   var r = await ptGetJSON('/search/pt/sites');
   _ptSites = (r && r.sites) || [];
   paintPtSites();
@@ -7400,10 +7407,39 @@ function _siteSub(s) {
   return parts.join(' · ');
 }
 
+// 插件导入回执：插件端推完 NEXUS 会把这个写进 config，这里一句话显示，双端对得上
+async function paintPtImportReceipt() {
+  var el = document.getElementById('ptSitesImport');
+  if (!el) return;
+  var r = null;
+  try {
+    if (!window._ptImportCfg) window._ptImportCfg = await _japi('/api/config');
+    r = (window._ptImportCfg || {}).last_site_import || null;
+  } catch (e) { return; }
+  if (!r || !r.at) { el.hidden = true; el.innerHTML = ''; return; }
+  var d = new Date(r.at * 1000);
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  var when = pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  var bad = r.probe_bad || [];
+  var txt = '插件导入 · ' + (r.added ? '新增 ' + r.added + ' 站' : '无新增')
+    + (r.updated ? ' · 更新 ' + r.updated + ' 站' : '')
+    + ' · ' + when
+    + (r.probe_ok ? ' · ' + r.probe_ok + ' 站实测正常' : '');
+  if (bad.length) txt += ' · ' + bad.length + ' 站待处理（' + bad.map(function(b) { return b.label; }).join(' / ') + '）';
+  el.hidden = false;
+  el.innerHTML = '<span class="dot' + (bad.length ? ' warn' : '') + '"></span><span>' + txt.replace(/</g, '&lt;') + '</span>';
+  // 刚推过来的（5 分钟内）额外弹一次 toast，避免用户没盯着这张卡就漏掉
+  if (r.at * 1000 > Date.now() - 300000 && !window._ptImportToasted) {
+    window._ptImportToasted = true;
+    toast('浏览器插件刚导入：新增 ' + (r.added || 0) + ' 站 / 更新 ' + (r.updated || 0) + ' 站', 'success');
+  }
+}
+
 function paintPtSites() {
   var host = document.getElementById('ptSitesList');
   var sum = document.getElementById('ptSitesSummary');
   if (!host) return;
+  paintPtImportReceipt();
   var total = _ptSites.length;
   var okN = 0, coolN = 0, offN = 0, warnN = 0, noCk = 0;
   _ptSites.forEach(function(s) {
