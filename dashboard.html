@@ -22,6 +22,8 @@
   --border-hi:rgba(255,255,255,0.16); --border-lo:rgba(255,255,255,0.08);
   --radius-xl:18px; --radius-lg:14px; --radius-md:12px; --radius-xs:10px; --radius-sm:8px;
   --glass-hover:rgba(255,255,255,0.1);
+  /* 页面底色（无轮播图时的基色）：与插件/设置页同一枚中性深灰，替代原蓝紫 #1a1a2e */
+  --c-bg:#1C1C1E; --c-bg-mid:#1D1D20; --c-bg-lift:#202023;
   --field-bg:rgba(0,0,0,0.25);
   --glass-strong:linear-gradient(145deg, rgba(255,255,255,0.17) 0%, rgba(255,255,255,0.10) 45%, rgba(255,255,255,0.06) 100%);
   --glass-mid:linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.04) 100%);
@@ -44,7 +46,7 @@
     font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
     color: #f0f0f4; min-height:100vh; overflow-x:hidden; overflow-y:auto;
     -webkit-font-smoothing: antialiased;
-    background: #1a1a2e;
+    background: var(--c-bg); /* #1C1C1E：中性深灰，捞图失败/无轮播时不泛蓝紫 */
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
@@ -138,9 +140,10 @@
   /* ===== 背景层 ===== */
   .bg-layer {
     position:fixed; inset:0; z-index:0;
+    /* 无轮播图（或图未到）时的基色：中性深灰 #1C1C1E 家族，不再偏蓝紫 */
     background:
-      radial-gradient(120% 120% at 20% 10%, rgba(20,24,42,0.90) 0%, rgba(22,26,44,0.88) 45%, rgba(10,12,20,0.95) 100%) center center / cover no-repeat;
-    filter: /* blur(8px) */ brightness(0.92) saturate(1.25);
+      radial-gradient(120% 120% at 20% 10%, var(--c-bg-lift) 0%, var(--c-bg-mid) 45%, var(--c-bg) 100%) center center / cover no-repeat;
+    filter: none; /* 占位态不压暗：底色即 #1C1C1E 本色；有图时由 applyHeroPoster 单独设 filter */
     transform: scale(1.05);
     transition: opacity 0.6s ease-in-out;
   }
@@ -148,8 +151,11 @@
   .bg-layer.active { opacity:1; }
   .bg-overlay {
     position:fixed; inset:0; z-index:1;
-    background: rgba(12,14,20,0.40);
+    background: rgba(0,0,0,0.40);
+    transition: opacity 0.6s ease-in-out;
+    opacity:0; /* 默认不压暗：无轮播图时底色就是本色 */
   }
+  body.has-backdrop .bg-overlay { opacity:1; } /* 有背景图时才压暗，保玻璃卡可读性 */
   /* 亮背景下文字可读性兜底：轻微投影，保持玻璃通透 */
   .section-title p, .section-title h3, .page-sub, .section-desc, .stat-label, .stat-value, .service-card h4 {
     text-shadow: 0 1px 2px rgba(0,0,0,0.35);
@@ -551,6 +557,8 @@
     background: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.45) 55%, transparent 100%);
     pointer-events:auto;
   }
+  /* 无轮播图时不要那条黑压边：底色统一为中性深灰 */
+  body:not(.has-backdrop) .poster-overlay { background:none; }
   .poster-overlay-title { font-size:26px; font-weight:800; color:#fff; line-height:1.2; margin-bottom:6px; text-shadow:0 1px 6px rgba(0,0,0,0.45); }
   .poster-overlay-meta { font-size:15px; color:rgba(255,255,255,0.85); margin-bottom:6px; text-shadow:0 1px 4px rgba(0,0,0,0.35); }
   .poster-overlay-overview { font-size:14px; color:rgba(255,255,255,0.75); line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; max-width:720px; text-shadow:0 1px 4px rgba(0,0,0,0.3); }
@@ -6149,6 +6157,8 @@ document.querySelectorAll('[data-herosource]').forEach(item => {
 /* 轮播图按图片比例精确定位：竖版海报（<1.25）偏上 18% 展示主体（头部/胸口条带），横版剧照居中偏上 40% */
 function applyHeroPoster(el, url, blurPoster) {
   if (!el || !url) return;
+  // 只要背景层真拿到了图，就允许压暗遮罩；无图时不加，底色保持 #1C1C1E 本色
+  if (el.id === 'bg1' || el.id === 'bg2') document.body.classList.add('has-backdrop');
   el.style.backgroundImage = `url('${url}')`;
   el.style.backgroundSize = 'cover';
   if (blurPoster) {
@@ -6216,6 +6226,8 @@ async function loadHeroSlides() {
   if (CONFIG.slides.length === 0) {
     CONFIG.slides = [{ poster: '', title: '暂无内容', year: '', genre: '' }];
   }
+  // 无图时不要那层压暗遮罩：底色就该是 #1C1C1E 本色，有图时才压暗保玻璃卡可读
+  document.body.classList.toggle('has-backdrop', !!CONFIG.slides[0].poster);
   currentSlide = 0;
   const first = CONFIG.slides[0];
   if (first.poster) {
