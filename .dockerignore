@@ -3,6 +3,7 @@
 *
 !api.py
 !dashboard.html
+!search_engine.py
 !Dockerfile
 
 # 明确排除（保险，即使上面的白名单被改成 COPY . .）
