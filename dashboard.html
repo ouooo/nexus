@@ -2146,6 +2146,28 @@
 #ptSitesCard .pt-form .f-chk input[type="checkbox"]:checked { background:var(--c-success); border-color:var(--c-success); }
 #ptSitesCard .pt-form .f-chk span { font-size:12px; color:var(--c-text-mid); }
 #ptSitesCard .pt-empty { padding:14px 0; color:var(--c-text-low); font-size:12.5px; }
+
+/* ===== 设置页交互一致化 ===== */
+/* 开关单行列表：整行可点，hover / 键盘焦点给填充高光，让人知道"我现在要操作哪一行" */
+.sw-row {
+  display:flex; align-items:center; justify-content:space-between; cursor:pointer;
+  padding:8px 10px; border-radius:var(--radius-sm);
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.sw-row:hover { background:var(--glass-hover); }
+.sw-row:focus-within { background:var(--glass-hover); box-shadow:inset 0 0 0 1px rgba(10,132,255,0.35); }
+
+/* 已授权客户端：会话列表限高可滚，卡片本身不再无限向下拉长 */
+#sessionsArea { max-height:320px; overflow-y:auto; padding-right:4px; }
+#sessionsArea::-webkit-scrollbar { width:6px; }
+#sessionsArea::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:3px; }
+
+/* 站点搜索：站名与其副标题同一行，副标题过长时省略 */
+#ptSitesCard .pt-line { display:flex; align-items:baseline; gap:8px; min-width:0; }
+#ptSitesCard .pt-name { flex:none; }
+#ptSitesCard .pt-sub { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+/* 站点启用状态：编辑态才是复选框（勾选=启用），非编辑态不出现 */
+#ptSitesCard .pt-row .pt-en { flex:0 0 auto; display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--c-text-low); }
   #mediaTypeBar { margin-top:12px; }
   /* chips 行距按底板高度（chip 高约 27px）而非文案高度计算；分类/排序等带底板标签各自独立一行，
      行间留足 row-gap，避免多行 chips 视觉紧贴/重叠 */
@@ -2471,7 +2493,7 @@
       <button id="btnLogoutDesktop" title="退出登录" style="background:rgba(255,100,100,0.12);border:1px solid rgba(255,100,100,0.28);color:rgba(255,138,128,0.92);cursor:pointer;font-size:11px;padding:4px 10px;border-radius:8px;display:flex;align-items:center;gap:4px;">🚪 退出</button>
     </div>
 
-    <div class="side-ver"><span>v2.2.7 · 局域网</span></div>
+    <div class="side-ver"><span>v2.2.8 · 局域网</span></div>
   </aside>
 
   <!-- 移动端底部吸底 TabBar(窄屏显示) -->
@@ -3375,7 +3397,7 @@
           <div style="display:flex;align-items:center;gap:10px;">
             <button onclick="toggleAuthEdit()" id="authEditBtn" style="padding:5px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;font-size:12px;cursor:pointer;">✏️ 编辑</button>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.6);">
-              <input type="checkbox" class="tgl" id="cfgAuthEnabled"> 启用登录
+              <input type="checkbox" class="tgl" id="cfgAuthEnabled" onchange="scheduleSaveConfig()"> 启用登录
             </label>
           </div>
         </div>
@@ -3408,34 +3430,34 @@
         </div>
       </div>
 
-      <!-- 已授权客户端（会话令牌）：插件与网页登录都在这里，可单条撤销 -->
-      <div class="glass-card" data-tab="auth" id="sessionsCard" style="margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <h3 style="font-size:15px;font-weight:700;">🔑 已授权客户端<span class="hint-ic" data-h="sessions" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
-          <button onclick="loadSessions()" id="sessionsRefreshBtn" style="padding:5px 12px;border-radius:var(--radius-xs);border:1px solid var(--border-hi);background:var(--glass-2);color:var(--c-text-hi);font-size:12px;cursor:pointer;">刷新</button>
-        </div>
-        <p class="card-hint">网页登录令牌 30 天、浏览器插件令牌 7 天，用一次续一次。撤销后该客户端立刻失效，需重新登录。</p>
-        <div id="sessionsArea" style="display:grid;gap:8px;">
-          <div class="card-hint" style="margin:0;">读取中…</div>
-        </div>
-      </div>
-
       <!-- 权限与角色 RBAC（仅管理员可见） -->
       <div class="glass-card" data-tab="auth" id="rbacCard" style="margin-bottom:16px;display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <h3 style="font-size:15px;font-weight:700;">👥 权限与角色 (RBAC)<span class="hint-ic" data-h="rbac" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
           <div style="display:flex;align-items:center;gap:10px;">
             <label id="rbacEnabledWrap" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.6);">
-              <input type="checkbox" class="tgl" id="rbacEnabled"> 启用
+              <input type="checkbox" class="tgl" id="rbacEnabled" onchange="scheduleSaveConfig()"> 启用
             </label>
             <button onclick="toggleRbacEdit()" id="rbacEditBtn" style="padding:7px 14px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">✏️ 编辑</button>
           </div>
         </div>
-        <p class="card-hint">为不同角色勾选可用功能并绑定 Emby 用户限定其媒体可见范围；账号隶属于角色，账号继承角色权限。轮播与搜索按角色范围过滤；无「设置」权限的账号看不到本页。</p>
+        <p class="card-hint">角色勾选可用功能 + 绑定 Emby 用户限定媒体范围；账号继承角色权限。无「设置」权限的账号看不到本页。</p>
         <div id="rbacRolesArea" style="display:grid;gap:12px;margin-bottom:6px;"></div>
         <button id="rbacAddRoleBtn" onclick="rbacAddRole()" class="btn-primary" style="display:none;margin-bottom:16px;">+ 新增角色</button>
         <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;color:rgba(255,255,255,0.6);">未分配角色的账号</h4>
         <div id="rbacUsersArea" style="display:grid;gap:10px;margin-bottom:12px;"></div>
+      </div>
+
+      <!-- 已授权客户端（会话令牌）：插件与网页登录都在这里，可单条撤销。放在权限与安全的最后（运维收尾） -->
+      <div class="glass-card" data-tab="auth" id="sessionsCard" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <h3 style="font-size:15px;font-weight:700;">🔑 已授权客户端<span class="hint-ic" data-h="sessions" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
+          <button onclick="loadSessions()" id="sessionsRefreshBtn" style="padding:5px 12px;border-radius:var(--radius-xs);border:1px solid var(--border-hi);background:var(--glass-2);color:var(--c-text-hi);font-size:12px;cursor:pointer;">刷新</button>
+        </div>
+        <p class="card-hint">网页令牌 30 天、插件令牌 7 天，用一次续一次；撤销后立刻失效需重新登录。</p>
+        <div id="sessionsArea" style="display:grid;gap:8px;">
+          <div class="card-hint" style="margin:0;">读取中…</div>
+        </div>
       </div>
 
       <!-- 服务监控 -->
@@ -3476,10 +3498,11 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <h3 style="font-size:15px;font-weight:700;">🔍 站点搜索<span class="hint-ic" data-h="ptSites" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
           <div style="display:flex;align-items:center;gap:8px;">
+            <button class="svc-add-corner" onclick="testAllSites()" id="ptTestAllBtn" title="逐个实测所有站点（耗时较长）">⚡ 测试全部</button>
+            <button class="svc-add-corner" onclick="togglePtSiteEdit()" id="ptEditBtn" title="编辑站点">✏️ 编辑</button>
             <button class="svc-add-corner" onclick="openSiteForm('__new__')">＋ 添加站点</button>
           </div>
         </div>
-        <p class="card-hint">这里是「站点搜索」这个搜索源自己的站点库：站点清单、启用开关、失败原因与补救动作、单站重测都在这里。搜索结果上方的状态条只报「本轮结果」，点它的「管理站点 ›」会回到本卡片。停用只影响 NEXUS 搜索，不影响站点本身与你的账号。</p>
         <div id="ptSitesSummary" class="pt-sum"><span class="pt-chip">载入中…</span></div>
         <div class="pt-tools">
           <input id="ptSiteKw" class="pt-search" placeholder="按名称或域名筛选" oninput="window._ptSiteKw=this.value;paintPtSites()">
@@ -3563,65 +3586,65 @@
         <h3 style="font-size:15px;font-weight:700;margin-bottom:14px;">⚡ 功能开关<span class="hint-ic" data-h="feat" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
         <p style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:14px;">关闭后对应功能不在前端展示，保存后生效</p>
         <div style="display:grid;gap:10px;">
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🔥 流行趋势</span>
             <input type="checkbox" class="tgl" id="featTrending">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎥 在线观影搜索</span>
             <input type="checkbox" class="tgl" id="featOnline">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🌐 站点资源搜索</span>
             <input type="checkbox" class="tgl" id="featPt">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📦 网盘资源搜索</span>
             <input type="checkbox" class="tgl" id="featPansou">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎠 首页轮播图</span>
             <input type="checkbox" class="tgl" id="featCarousel">
           </label>
         </div>
         <div style="display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
           <div style="font-size:12px;color:rgba(255,255,255,0.55);">轮播来源（关闭后自动/手动切换均跳过该源）</div>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🕐 最近入库</span>
             <input type="checkbox" class="tgl" id="heroSrcRecent">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎲 随机推荐</span>
             <input type="checkbox" class="tgl" id="heroSrcRandom">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">⭐ 热门高分</span>
             <input type="checkbox" class="tgl" id="heroSrcTrending">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎬 TMDB 流行</span>
             <input type="checkbox" class="tgl" id="heroSrcTmdb">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📚 豆瓣热门</span>
             <input type="checkbox" class="tgl" id="heroSrcDouban">
           </label>
         </div>
         <div style="display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
           <div style="font-size:12px;color:rgba(255,255,255,0.55);">媒体库轮播内容类型（关闭后媒体库来源不再展示该类，未知类型默认保留）</div>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎬 电影</span>
             <input type="checkbox" class="tgl" id="heroTypeMovie">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📺 电视剧</span>
             <input type="checkbox" class="tgl" id="heroTypeTv">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📱 短剧</span>
             <input type="checkbox" class="tgl" id="heroTypeShort">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎨 动漫</span>
             <input type="checkbox" class="tgl" id="heroTypeAnime">
           </label>
@@ -3633,19 +3656,19 @@
         <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;">🔥 流行趋势数据源<span class="hint-ic" data-h="trend" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
         <p style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:14px;">勾选要展示的流行趋势来源，保存后生效</p>
         <div style="display:grid;gap:10px;">
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎬 豆瓣热门电影</span>
             <input type="checkbox" class="tgl" id="trendDouban">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📺 豆瓣热门电视</span>
             <input type="checkbox" class="tgl" id="trendDoubanTv">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🎦 爱奇艺热门剧集</span>
             <input type="checkbox" class="tgl" id="trendIqiyi">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📺 哔哩哔哩热门（动漫/视频）</span>
             <input type="checkbox" class="tgl" id="trendBilibili">
           </label>
@@ -3657,16 +3680,16 @@
         <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;">🎴 观影卡片池来源</h3>
         <p style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:14px;">选择「抽卡」从哪些来源随机出卡，保存后生效（默认仅媒体库）</p>
         <div style="display:grid;gap:10px;">
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">📽️ 媒体库（Emby 已收藏影片）</span>
             <input type="checkbox" class="tgl" id="journeyMedia">
           </label>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🌐 TMDB（每周热门，电影+剧集）</span>
             <input type="checkbox" class="tgl" id="journeyTmdb">
           </label>
           <div id="journeyTmdbStatus" style="font-size:12px;margin-top:2px;color:rgba(255,255,255,0.55);"></div>
-          <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+          <label class="sw-row">
             <span style="font-size:13px;">🔄 每日认领一次（关闭则开发/调试不限）</span>
             <input type="checkbox" class="tgl" id="journeyDaily">
           </label>
@@ -4567,6 +4590,8 @@ function removeOnlineSrc(i) {
 }
 window._authEditMode = window._authEditMode || false;
 function toggleAuthEdit() {
+  // 退出编辑（点 ✓ 完成）= 落库；原来只切显隐，用户名/密码改了也不会保存
+  if (window._authEditMode) saveConfig();
   window._authEditMode = !window._authEditMode;
   const view = document.getElementById('authView');
   const form = document.getElementById('authEditForm');
@@ -4574,6 +4599,13 @@ function toggleAuthEdit() {
   if (view) view.style.display = window._authEditMode ? 'none' : 'grid';
   if (form) form.style.display = window._authEditMode ? 'grid' : 'none';
   if (btn) btn.textContent = window._authEditMode ? '✓ 完成' : '✏️ 编辑';
+}
+
+/* 设置页里"改了就立刻生效"的开关（RBAC 启用、登录启用等）：600ms 防抖后统一落库 */
+window._cfgSaveTimer = window._cfgSaveTimer || null;
+function scheduleSaveConfig() {
+  if (window._cfgSaveTimer) clearTimeout(window._cfgSaveTimer);
+  window._cfgSaveTimer = setTimeout(function() { window._cfgSaveTimer = null; saveConfig(); }, 600);
 }
 
 /* ===== 已授权客户端：列出所有会话，可单条撤销（插件令牌 7 天、网页 30 天） ===== */
@@ -4869,7 +4901,8 @@ window._rbacUsers = []; // {username, role, password, hasPass}
 window._rbacEditMode = window._rbacEditMode || false;
 
 function toggleRbacEdit() {
-  // 进入编辑前先同步当前只读态数据（无输入框，直接重渲染即可）
+  // 退出编辑（点 ✓ 完成）= 落库；原来这里什么都不做，所以改了权限/账号都不生效
+  if (window._rbacEditMode) saveConfig();
   window._rbacEditMode = !window._rbacEditMode;
   var btn = document.getElementById('rbacEditBtn');
   if (btn) btn.textContent = window._rbacEditMode ? '✓ 完成' : '✏️ 编辑';
@@ -5400,7 +5433,16 @@ async function saveConfig() {
     data.storage = storage;
   }
   try {
-    await fetch(API_BASE + '/config', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem('nexus_token')}, body: JSON.stringify(data) });
+    const resp = await fetch(API_BASE + '/config', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem('nexus_token')}, body: JSON.stringify(data) });
+    // 原来不管状态码一路 toast「已保存」——被拒/出错时用户以为改好了，实际没落库
+    if (!resp.ok) {
+      let msg = '';
+      try { const j = await resp.json(); msg = (j && (j.error || j.message)) || ''; } catch (e) { /* 非 JSON */ }
+      if (resp.status === 401) { toast('登录已失效，请重新登录后再保存', 'error'); showLogin(); return; }
+      if (resp.status === 403) { toast('没有保存权限（需要「设置」权限）' + (msg ? '：' + msg : ''), 'error'); return; }
+      toast('保存失败（HTTP ' + resp.status + '）' + (msg ? '：' + msg : ''), 'error');
+      return;
+    }
     toast('配置已保存', 'success');
     applyHeroSrcCfgFromDom();
     setTimeout(() => { fetchApps(); loadSettings(); }, 500);
@@ -7190,6 +7232,7 @@ function toggleSiteDiag() {
 /* ===== 站点库管理：设置 → 服务与连接 →「站点搜索」卡片内（状态条只做跳转，不重复一套 UI） ===== */
 var _ptSites = [];
 var _ptEditing = null;
+var _ptSiteEditMode = false;   // 非编辑态只给「测试」；编辑态才出现启用复选框 / 编辑 / 删除
 var _PT_ENGINES = ['nexusphp', 'unit3d', 'gazelle', 'discuz', 'generic'];
 
 async function ptGetJSON(path) {
@@ -7291,21 +7334,23 @@ function paintPtSites() {
   if (_ptEditing && _ptEditing !== '__new__') cap = shown.length;  // 编辑态必须让该站与表单同屏
   var folded = shown.length - cap;
   shown.slice(0, cap).forEach(function(s) {
+    // 非编辑态：只给单站「测试」；编辑态才出现启用复选框与「编辑 / 删除」
+    var ops = _ptSiteEditMode
+      ? '<label class="pt-en" title="' + (s.enabled ? '已启用，取消勾选即停用' : '已停用，勾选即启用') + '">'
+        + '<input type="checkbox" class="tgl" ' + (s.enabled ? 'checked' : '') + ' onchange="toggleSiteEnabled(\'' + esc(s.id) + '\',this.checked)">'
+        + '启用</label>'
+        + '<button class="pt-btn" onclick="testSiteDiag(\'' + esc(s.id) + '\',this)">测试</button>'
+        + '<button class="pt-btn" onclick="openSiteForm(\'' + esc(s.id) + '\')">编辑</button>'
+        + '<button class="pt-btn danger" onclick="deleteSite(\'' + esc(s.id) + '\')">删除</button>'
+      : '<button class="pt-btn" onclick="testSiteDiag(\'' + esc(s.id) + '\',this)">测试</button>';
     body += '<div class="pt-row">'
-      + '<label style="display:flex;align-items:center;gap:6px;flex:0 0 auto;" title="' + (s.enabled ? '已启用，点击停用' : '已停用，点击启用') + '">'
-      + '<input type="checkbox" class="tgl" ' + (s.enabled ? 'checked' : '') + ' onchange="toggleSiteEnabled(\'' + esc(s.id) + '\',this.checked)">'
-      + '</label>'
       + '<span class="pt-dot ' + _siteTone(s) + '"></span>'
-      + '<div class="pt-main"><div class="pt-name">' + esc(s.name || s.id) + '</div>'
-      + '<div class="pt-sub">' + esc(_siteSub(s)) + '</div>'
+      + '<div class="pt-main"><div class="pt-line"><span class="pt-name">' + esc(s.name || s.id) + '</span>'
+      + '<span class="pt-sub">' + esc(_siteSub(s)) + '</span></div>'
       + (((s.diag && s.diag.reason) || s.reason) ? '<div class="pt-reason">' + esc((s.diag && s.diag.reason) || s.reason)
         + (s.diag && s.diag.action ? ' → ' + esc(s.diag.action) : '') + '</div>' : '')
       + '</div>'
-      + '<div class="pt-ops">'
-      + '<button class="pt-btn" onclick="testSiteDiag(\'' + esc(s.id) + '\',this)">重测</button>'
-      + '<button class="pt-btn" onclick="openSiteForm(\'' + esc(s.id) + '\')">编辑</button>'
-      + '<button class="pt-btn danger" onclick="deleteSite(\'' + esc(s.id) + '\')">删除</button>'
-      + '</div></div>';
+      + '<div class="pt-ops">' + ops + '</div></div>';
     if (_ptEditing === s.id) body += siteFormHtml(s);
   });
   if (!shown.length) body = '<div class="pt-empty">没有匹配的站点。可点右上角「＋ 添加站点」，或由浏览器插件一键导入。</div>';
@@ -7338,6 +7383,10 @@ function siteFormHtml(s) {
     + '<div><label>超时（秒，0=跟随全局 3.5）</label><input data-f="timeout" type="number" min="0" step="0.5" value="' + esc(String((s && s.timeout) != null ? s.timeout : 3.5)) + '"></div>'
     + '</div>'
     + '<div class="f-chk">'
+    + '<input type="checkbox" data-f="enabled"' + ((isNew || (s && s.enabled)) ? ' checked' : '') + '>'
+    + '<span>启用（参与 NEXUS 站点搜索；取消勾选只在 NEXUS 里停用，不影响站点本身与你的账号）</span>'
+    + '</div>'
+    + '<div class="f-chk">'
     + '<input type="checkbox" data-f="insecure"' + ((s && s.insecure) ? ' checked' : '') + '>'
     + '<span>允许自签名证书（站点证书过期或自签时打开，等于跳过证书校验）</span>'
     + '</div>'
@@ -7349,6 +7398,33 @@ function siteFormHtml(s) {
 }
 
 function openSiteForm(id) { _ptEditing = id || '__new__'; paintPtSites(); }
+
+function togglePtSiteEdit() {
+  _ptSiteEditMode = !_ptSiteEditMode;
+  var btn = document.getElementById('ptEditBtn');
+  if (btn) btn.textContent = _ptSiteEditMode ? '✓ 完成' : '✏️ 编辑';
+  paintPtSites();
+}
+
+/* 一次测试所有在用站点：顺序跑（每站之间留间隔，别把站点打急），跑完给一句汇总 */
+async function testAllSites() {
+  var btn = document.getElementById('ptTestAllBtn');
+  var list = _ptSites.filter(function(s) { return s.enabled !== false; });
+  if (!list.length) { toast('没有可测试的站点', 'error'); return; }
+  if (btn) { btn.disabled = true; }
+  var okN = 0, badN = 0;
+  for (var i = 0; i < list.length; i++) {
+    if (btn) btn.textContent = '测 ' + (i + 1) + '/' + list.length;
+    try {
+      var r = await apiPost('/search/pt/sites/test', { id: list[i].id, q: (window._ptQuery || '') });
+      if (r && r.ok) okN++; else badN++;
+    } catch (e) { badN++; }
+    await new Promise(function(res) { setTimeout(res, 900); });
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '⚡ 测试全部'; }
+  toast('测试完成：' + okN + ' 站可用，' + badN + ' 站异常', badN ? 'error' : 'success');
+  await loadPtSites();
+}
 
 function toggleSiteSort() {
   window._ptSortBy = (window._ptSortBy === 'name') ? 'risk' : 'name';
@@ -7371,6 +7447,7 @@ async function saveSiteForm(id) {
     engine: val('engine') || 'nexusphp',
     requestDelay: Number(val('requestDelay') || 0),
     timeout: Number(val('timeout') || 0),
+    enabled: !!form.querySelector('[data-f="enabled"]').checked,
     insecure: !!form.querySelector('[data-f="insecure"]').checked,
     search: {}
   };
@@ -9712,6 +9789,9 @@ window.applyFilters = applyFilters;
 window.togglePwd = togglePwd;
 window.toggleAuthEdit = toggleAuthEdit;
 window.toggleRbacEdit = toggleRbacEdit;
+window.scheduleSaveConfig = scheduleSaveConfig;
+window.togglePtSiteEdit = togglePtSiteEdit;
+window.testAllSites = testAllSites;
 window.rbacAddRole = rbacAddRole;
 window.cancelSvcEdit = cancelSvcEdit;
 window.toggleSvcEdit = toggleSvcEdit;
@@ -10642,7 +10722,7 @@ var HELP_DB = {
   trend: { t: '流行趋势数据源', d: '勾选需要在「流行趋势」页展示的来源（如豆瓣热门电影/电视），可多选；保存后生效。' },
   devTitle: { t: '服务分类名称', d: '服务页按设备分组展示服务卡，分组标题默认是「SA 服务」「DS 服务」这类「设备名 + 服务」的形式。在这里给每个设备填一个自己的显示名（例如「主力 NAS」「备份机」），服务页标题与服务编辑里的「所属设备」下拉都会跟着变。留空则回到默认名称；设备标识本身不变，端口与健康检查完全不受影响。' },
   cc: { t: 'CookieCloud', d: 'CookieCloud 用于把浏览器 Cookie 端到端加密同步到 NEXUS。NEXUS 只需配置「服务器地址 + 端到端加密密码」：插件端与 NEXUS 使用同一套 UUID 与密码即可（UUID 只需在插件端生成并保持一致）。工作模式、加密算法、Cookie 过期时间等由浏览器插件端控制，NEXUS 侧无需重复配置。' },
-  ptSites: { t: '站点搜索', d: 'NEXUS 的 PT 站点搜索源。站点库支持启用/停用、单站重测、编辑与删除；每站有独立的请求间隔（默认 3 秒，0 关闭）、独立超时（默认跟随全局 3.5 秒）与全局限速，避免短时间内反复请求被站点风控。有些老站证书过期或自签，编辑里勾选「允许自签名证书」即可跳过校验。搜索失败时按原因给结论：cookie 失效→去站点重新登录后由浏览器插件或 CookieCloud 推回；被限速→调大该站间隔或等冷却结束；挑战页→站点开了人机验证，需浏览器过验证后重推 cookie；网络不通→检查代理与 DNS。' }
+  ptSites: { t: '站点搜索', d: '这里是「站点搜索」这个搜索源自己的站点库：站点清单、启用、失败原因与补救动作、单站测试、全量测试都在这里。搜索结果上方的状态条只报「本轮结果」，点它的「管理站点 ›」会回到本卡片。平时每行只显示「测试」；点右上角「编辑」后才出现启用复选框与「编辑 / 删除」。停用只影响 NEXUS 搜索，不影响站点本身与你的账号。每站有独立请求间隔（默认 3 秒）与超时（默认跟随全局 3.5 秒），老站证书过期或自签可在编辑里勾「允许自签名证书」。失败按原因给结论：cookie 失效→去站点重新登录后由插件或 CookieCloud 推回；被限速→调大该站间隔或等冷却；挑战页→浏览器过验证后重推 cookie；网络不通→查代理与 DNS。' }
 };
 var _helpIconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg>';
 function openHint(key, anchor) {
