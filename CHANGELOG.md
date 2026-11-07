@@ -2,6 +2,19 @@
 
 ## 2.2.9 — 2026-11-07
 
+### 站名清洗静默失效的根因（hc14）
+- 症状：hc13 里 `_site_display_name` 明明存在、调用点也在，插件推上来的标签页标题却照样入库（8 条 `BTSCHOOL :: 查看主题 …`）。
+- 根因：`api.py` 只 `import urllib.parse`，没导入 `urlsplit`；`_site_display_name` 里 `urlsplit(...)` 抛 `NameError` 被自己的 `except` 吞掉 → `host` 恒为空 → `bad` 分支只能退回原串，等于**永远不清洗**。这也解释了为什么「清洗脚本跑完 0 残留、过一会又变回标题」。
+- 修：改用 `urllib.parse.urlsplit`；`bad` 且取不到 host 时，先从标题里抠域名（`1PTBA.COM :: 首页 …` → `1ptba.com`），再退到分隔符前的短片段（`BTSCHOOL :: 查看主题 …` → `BTSCHOOL`）。
+- 读取端 `pt_sites_health()` 也对 `name` 过一遍清洗，库里残留旧值不会先显示成标题。
+- 验收：43 站全量提交（只带 id，服务端重算站名）后磁盘与接口「可疑 0 条」；再故意推 `ZZ :: 首页 …` 类标题名，接口当场返回 `pt.btschool.club`。
+
+### 插件图标：透明底 + 加饱和（1.2.4）
+- 用户第三次强调：图标要像左侧导航栏顶部 logo，透明底，不要白底瓦片。
+- `_icons_transparent.py`：从 `dashboard.html` 的 favicon base64 取星形 → 裁 alpha bbox → 6% 内边距 → 保 alpha 重上色（`#1452F6 → #009E9E` 品牌蓝→青，仅 22% 向白提亮）→ 16/32/48/128/256。
+- 透明像素 62.9%（16px）/ 75.2%（32px）/ 79.8%（48px）/ 81.8%（128px），四角 alpha 全 0；白底亮度差 128.7、深底 98.1、浅灰 98.9，三种底色上都看得见。
+- 插件 `manifest.json` 版本 1.2.4，zip 61264 B / 13 条目 / sha16 `4b2c408f1c25c7ff`。
+
 ### 站点卡：长站名/长诊断不再顶出卡片（hc13）
 - 症状（用户截图复诉）：诊断长句越到卡右缘之外、「测试」按钮悬在卡外；媒体库统计块 1310px 宽下仍 2+1 换行；站点名被写成标签页标题。
 - `#ptSitesCard .pt-main` 补 `overflow:hidden`，`.pt-line` 补 `overflow:hidden`；`.pt-name` 由 `flex:none` 改 `flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis`（超长站名截断而不是把整行顶宽）；`.pt-reason` 补 `overflow-wrap:anywhere; word-break:break-word`。
