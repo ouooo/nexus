@@ -456,7 +456,11 @@
     display:flex; gap:0; margin-bottom:28px; overflow:hidden;
     padding:0 !important; position:relative;
     aspect-ratio: 16 / 6.2;
+    /* 触屏：横向留给轮播手势，纵向仍归页面滚动（缺这条浏览器会用 pointercancel 吞掉滑动） */
+    touch-action: pan-y;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
   }
+  .hero-media img, .hero-media .hero-poster { -webkit-user-drag:none; user-select:none; }
   .hero-media-left {
     flex:0 0 40%; padding:32px; display:flex; flex-direction:column; justify-content:space-between;
     background: linear-gradient(160deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.05) 100%);
@@ -2459,7 +2463,7 @@
       <button id="btnLogoutDesktop" title="退出登录" style="background:rgba(255,100,100,0.12);border:1px solid rgba(255,100,100,0.28);color:rgba(255,138,128,0.92);cursor:pointer;font-size:11px;padding:4px 10px;border-radius:8px;display:flex;align-items:center;gap:4px;">🚪 退出</button>
     </div>
 
-    <div class="side-ver"><span>v2.2.3 · 局域网</span></div>
+    <div class="side-ver"><span>v2.2.4 · 局域网</span></div>
   </aside>
 
   <!-- 移动端底部吸底 TabBar(窄屏显示) -->
@@ -6561,18 +6565,43 @@ async function goToSlide(i) {
   _applySlide(next, i);
 }
 
-// ===== 轮播手势：左右滑动手动切换当前组内图片（触屏 + 鼠标拖拽） =====
-let _heroPX = 0, _heroPY = 0, _heroDrag = false, _heroSwiped = false;
+// ===== 轮播手势：触屏 / 触控笔 / 鼠标统一走 Pointer Events =====
+// touch-action 在 .hero-media 上设为 pan-y：横向手势交给我们，纵向仍归页面滚动（否则浏览器会 pointercancel 吞掉滑动）
+let _heroPX = 0, _heroPY = 0, _heroLX = 0, _heroLY = 0, _heroPT = 0,
+    _heroDrag = false, _heroSwiped = false, _heroCancel = false;
 const _heroCar = document.getElementById('heroCarousel');
 if (_heroCar) {
-  _heroCar.addEventListener('pointerdown', function(e) { _heroPX = e.clientX; _heroPY = e.clientY; _heroDrag = false; _heroSwiped = false; });
-  _heroCar.addEventListener('pointermove', function(e) { if (Math.abs(e.clientX - _heroPX) > 6 || Math.abs(e.clientY - _heroPY) > 6) _heroDrag = true; });
-  _heroCar.addEventListener('pointerup', function(e) {
-    const dx = e.clientX - _heroPX, dy = e.clientY - _heroPY;
-    if (_heroDrag && Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
-      _heroSwiped = true; setTimeout(function() { _heroSwiped = false; }, 250);
+  function _heroFinish(x, y) {
+    if (!_heroDrag) return;
+    const dx = x - _heroPX, dy = y - _heroPY;
+    const dt = Math.max(1, performance.now() - _heroPT);
+    const fast = Math.abs(dx) / dt > 0.35;                       // 快速轻扫
+    if ((Math.abs(dx) > 35 || (fast && Math.abs(dx) > 18)) && Math.abs(dx) > Math.abs(dy) * 1.1) {
+      _heroSwiped = true;
+      setTimeout(function() { _heroSwiped = false; }, 260);      // 抑制滑动后误触的 click
       if (dx < 0) nextSlide(); else prevSlide();
     }
+  }
+  _heroCar.addEventListener('pointerdown', function(e) {
+    if (typeof e.button === 'number' && e.button !== 0) return;  // 只认左键 / 单指
+    _heroPX = _heroLX = e.clientX; _heroPY = _heroLY = e.clientY;
+    _heroPT = performance.now();
+    _heroDrag = false; _heroSwiped = false; _heroCancel = false;
+    try { _heroCar.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  _heroCar.addEventListener('pointermove', function(e) {
+    if (_heroCancel) return;
+    _heroLX = e.clientX; _heroLY = e.clientY;
+    const dx = e.clientX - _heroPX, dy = e.clientY - _heroPY;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) _heroDrag = true;
+    // 横向为主时才拦原生行为，纵向手势留给页面滚动
+    if (_heroDrag && e.cancelable && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+  }, { passive: false });
+  _heroCar.addEventListener('pointerup', function(e) { _heroFinish(e.clientX, e.clientY); });
+  _heroCar.addEventListener('pointercancel', function() {
+    // iOS Safari 等仍可能 cancel：用最后一次坐标补一次判定，否则大屏平板滑不动
+    _heroCancel = true;
+    _heroFinish(_heroLX, _heroLY);
   });
   document.addEventListener('click', function(ev) {
     if (_heroSwiped && _heroCar.contains(ev.target)) { ev.preventDefault(); ev.stopPropagation(); _heroSwiped = false; }
