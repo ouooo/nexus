@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.2.8 — 2026-11-07
+
+### 修复：设置 → 「权限与安全」改了不生效（尤其 RBAC）
+- **根因**：`toggleRbacEdit()` / `toggleAuthEdit()` 点「✓ 完成」时**只切显隐、从不调用 `saveConfig()`**；而 `saveConfig()` 也**不检查响应状态**，`await fetch(...)` 之后无条件 `toast('配置已保存','success')`。所以即使 POST 被拒（403/401），界面照样显示「已保存」，用户看到的就是「改了没反应」。线上 `config.json` 里确实一直没有 `rbac` 键，印证 RBAC 从未落盘。
+- 两个 toggle 在退出编辑态时调用 `saveConfig()`；新增 `scheduleSaveConfig()`（600ms 防抖），给 `#rbacEnabled`、`#cfgAuthEnabled` 挂 `onchange`，开关点一下就落库。
+- `saveConfig()` 改为检查 `resp.ok`：401 → 「登录已失效」+ 回登录页；403 → 「没有保存权限（需要「设置」权限）」；其它 → 「保存失败（HTTP xxx）」并带服务端 `error`。失败不再假报成功。
+
+### 权限与安全 · 排版
+- **`🔑 已授权客户端` 限高可滚**：`#sessionsArea` 加 `max-height:320px; overflow-y:auto` + 6px 细滚动条，会话再多也只占一屏，卡片不再被条数无限拉长。
+- **顺序改「配置在前、运维收尾」**：卡片顺序变为 安全与登录 → 权限与角色(RBAC) → 已授权客户端，「已授权客户端」挪到本 tab 最后。
+- 两块 `card-hint` 收短（RBAC：`角色勾选可用功能 + 绑定 Emby 用户限定媒体范围；账号继承角色权限。无「设置」权限的账号看不到本页。`；sessions：`网页令牌 30 天、插件令牌 7 天，用一次续一次；撤销后立刻失效需重新登录。`）。
+
+### 设置 → 站点搜索卡：交互按「非编辑 / 编辑」两态拆开
+- 卡头三按钮：`⚡ 测试全部`、`✏️ 编辑`、`＋ 添加站点`。原来那条超长 `card-hint` 从卡面撤掉，内容并进 `HELP_DB.ptSites`，点标题旁问号才展开。
+- **非编辑态**：每行只显示「测试」；不显示启用开关，也不显示编辑/删除 —— 避免误改。
+- **编辑态**（点 `✏️ 编辑` → 按钮变 `✓ 完成`）：每行出现 `启用` **复选框**（勾选=启用，与设置页其它地方一致，不再是左侧 Switch）+「测试 / 编辑 / 删除」。
+- `⚡ 测试全部`：对 `enabled !== false` 的站在用项顺序实测，站间 900ms，按钮显示「测 i/n」，结束提示「测试完成：x 站可用，y 站异常」并刷新状态。
+- 添加/编辑站点表单新增 `启用` 复选框，**默认勾选**；`saveSiteForm()` 一并提交 `enabled`（后端 `pt_save_sites` 是局部合并，可直接写入）。
+
+### 设置 → 站点搜索卡：信息密度
+- `pt-sub` 不再另起一行：行内结构改为 `pt-line` = `pt-name`（站名，不收缩）+ `pt-sub`（`host · 引擎 · 间隔 · cookie`，过长单行省略）。
+- 副标题与解释文案统一收短；长说明只留在问号弹层里。
+
+### 全局：开关单行列表的 hover / 焦点高亮
+- 21 处「一行一个开关」的 `<label>` 统一换 `class="sw-row"`：`padding:8px 10px` + `border-radius`，`:hover` 用 `var(--glass-hover)` 填充高光，`:focus-within` 额外描一圈 1px 蓝边（键盘 Tab 也能看出当前行），移动/选中不再需要反复比对左右对齐。
+
+### 其他
+- 全局暴露补 `window.scheduleSaveConfig` / `window.togglePtSiteEdit` / `window.testAllSites`（内联 `onchange` / `onclick` 走全局作用域，漏加只报 `is not defined`，语法检查查不出）。
+
 ## 2.2.7 — 2026-11-07
 
 ### 站点搜索体验（用户现场 4 条）
