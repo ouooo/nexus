@@ -2271,6 +2271,34 @@ def _record_import_receipt(payload, res, probes):
     CONFIG = load_config()
 
 
+def _record_cookie_sync_receipt(domains, mp_updated, sites_updated, matched, user='', client='extension'):
+    """插件「扫描已打开站点」后的 NEXUS 端回执：写 config.json 的 last_cookie_sync。
+
+    与 last_site_import 分开记：只喂 cookie 时不会走 /api/sites/import，
+    但前端同样要能看到「刚才同步了几站 cookie、刷了几个站点」。
+    """
+    receipt = {
+        'at': int(time.time()),
+        'client': str(client or 'extension')[:24],
+        'by': str(user or '')[:24],
+        'domains': int(domains or 0),
+        'mp_updated': int(mp_updated or 0),
+        'sites_updated': int(sites_updated or 0),
+        'matched': [str(m)[:24] for m in (matched or [])][:12],
+    }
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+    except Exception:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    raw['last_cookie_sync'] = receipt
+    _atomic_write(CONFIG_PATH, raw, indent=2)
+    global CONFIG
+    CONFIG = load_config()
+
+
 def pt_save_sites(payload):
     """保存站点定义到 /data/sites.json。
 
@@ -4094,6 +4122,11 @@ class Handler(BaseHTTPRequestHandler):
                 _log('WARN', 'search', '插件批量同步刷站点库失败: %s' % e)
             _log('INFO', 'search', '插件批量同步 domains=%d mp_updated=%d sites_updated=%d by=%s'
                  % (len(clean), mp_updated, sites_updated, s.get('username', '')))
+            try:
+                _record_cookie_sync_receipt(len(clean), mp_updated, sites_updated, matched,
+                                           s.get('username', ''), data.get('client') or 'extension')
+            except Exception as e:
+                _log('WARN', 'search', '批量同步回执写入失败: %s' % e)
             self.send_json({'ok': True, 'domains': len(clean), 'mp_updated': mp_updated,
                             'sites_updated': sites_updated, 'matched': matched})
 
@@ -4843,6 +4876,7 @@ class Handler(BaseHTTPRequestHandler):
                         cfg_out['features'] = raw['features']
                     cfg_out['trend_sources'] = raw.get('trend_sources', {})
                     cfg_out['last_site_import'] = raw.get('last_site_import', {}) or {}
+                    cfg_out['last_cookie_sync'] = raw.get('last_cookie_sync', {}) or {}
                     cfg_out['volume_aliases'] = raw.get('volume_aliases', {})
                     cfg_out['journey'] = raw.get('journey', {}) or {}
                     cfg_out['storage'] = raw.get('storage', {})

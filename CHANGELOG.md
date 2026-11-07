@@ -2,6 +2,24 @@
 
 ## 2.2.9 — 2026-11-07
 
+### 设置页「站点搜索」卡宽度（布局错乱修复）
+- 根因：`.settings-grid { display:block; max-width:840px; }` 把整列卡片锁死 840px，宽屏下右侧「测试」按钮列落在卡外、`.pt-reason` 长句右溢到卡缘外。
+- 改为 `.settings-grid { display:block; width:100%; max-width:min(1180px,100%); }`：卡片随窗口放宽到 1180（上限）并在窄屏自动收缩。
+- 生产实测：1440 视口 grid/卡片 = 1172；1920 = 1180；1100 = 816；三档均无横向滚动条。
+
+### 插件扫描同步在 NEXUS 端也有回执（`last_cookie_sync`）
+- `POST /api/sites/cookie-sync` 结束时报一次回执：新增 `_record_cookie_sync_receipt()` 把 `{at, client, by, domains, mp_updated, sites_updated, matched[:12]}` 写进 `config.json` 的 `last_cookie_sync`（`_atomic_write` + 重载 `CONFIG`）。
+- 与 `last_site_import` 分开记：只投喂登录态时不会走 `/api/sites/import`，但网页端同样要看得到「刚才同步了几站」。
+- GET `/api/config` 增出 `last_cookie_sync`。
+- 前端 `paintPtImportReceipt()` 改为取两条回执里更新的那条：`插件扫描 · 同步 n 站登录态 · 站点库更新 n · MP 更新 n · MM-DD HH:MM · 命中 …`，5 分钟内补一条 toast。**双端反馈至此闭环：插件 popup/角标/options 卡 + NEXUS 设置页回执行。**
+
+### 插件站名不再取标签页标题（1.2.1）
+- 删除 `nameFromTab()`（它只按 `- | · —` 前缀截断，`::` 分隔的标题整段留下，于是出现 `1PTBA.COM :: 首页 1PTBA,…` / `首页 :: DIC Music` / `BTSCHOOL :: 查看主题 "…"`）。
+- 新增 `labelFromHost(host)`（去 `www.` 返回裸域名）与 `nameForHost(host, knownNames)`（优先 NEXUS 站点库已登记名 → 域名后缀互匹 → 回落裸域名）；`scanOpenSites()` 拉完 `pullHealth()` 后建 `knownHosts` / `knownNames`，5 处调用全部替换。
+- 生产 `sites.json` 8 条历史标题式站名就地清洗为裸域名（备份 `sites.json.bak.names-20261107`）。
+- 插件回执：`scanOpenSites()` 写 `lastScanSummary{at,ptSynced,ptNew,douban,hosts,sitesUpdated,mpUpdated,error}`；`cfg()` 补读该键；`options.html` 新增「上次扫描回执」卡 + `options.js renderLastScan()`；有同步且无错误时工具栏绿角标显示站数，10 秒后回落。
+- `manifest.json` `1.2.0 → 1.2.1`。
+
 ### 首页「媒体库」统计按容器宽度自适应（不再固定 2 列换行）
 - `.lib-stats` 由 `repeat(2, 1fr)`（写死 2 列，三项必然 2+1 两行）改为 `repeat(auto-fit, minmax(108px, 1fr))`；≤768px 断点 `minmax(96px, 1fr)`、≤480px 断点 `minmax(88px, 1fr)`，两处旧的 `repeat(2, 1fr)` 覆盖已删除。
 - `.lib-stat .cat`（部电影/张专辑/部剧集）加 `white-space:nowrap + ellipsis`，与 `.num` 同口径，不再出现半截换行。
