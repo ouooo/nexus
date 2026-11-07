@@ -1431,32 +1431,30 @@
   .flip-search-choice.sel-online { border-color: rgba(10,132,255,0.45); background: rgba(10,132,255,0.14); color: #5BA3FF; }
   .flip-search-choice.sel-pt { border-color: rgba(48,209,88,0.45); background: rgba(48,209,88,0.12); color: var(--c-success); }
 
-  /* 搜索浮层：筛选 + 排序工具条（2.2.9） */
+  /* 搜索浮层：筛选 + 排序工具条（2.2.9，chip 语义与主搜索页 #ptFilterBar 一致） */
   .flip-search-toolbar {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    display: flex; flex-direction: column; gap: 8px;
     padding: 10px 18px; border-bottom: 1px solid var(--border-lo);
   }
-  .flip-search-toolbar .fs-label { flex: 0 0 auto; font-size: 11px; color: rgba(255,255,255,0.45); }
-  .flip-search-toolbar .fs-src {
-    display: flex; gap: 6px; flex: 1 1 200px; min-width: 0;
+  .flip-search-toolbar .fs-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .flip-search-toolbar .fs-label { flex: 0 0 auto; font-size: 11px; color: rgba(255,255,255,0.4); }
+  .flip-search-toolbar .fs-chips {
+    display: flex; gap: 6px; flex: 1 1 auto; min-width: 0;
     overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
   }
-  .flip-search-toolbar .fs-src::-webkit-scrollbar { display: none; }
-  .flip-search-toolbar .fs-sort { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+  .flip-search-toolbar .fs-chips::-webkit-scrollbar { display: none; }
   .flip-search-toolbar .fs-chip {
-    flex: 0 0 auto; padding: 3px 10px; border-radius: var(--radius-sm);
-    border: 1px solid var(--border-hi); background: var(--glass-faint);
-    color: rgba(255,255,255,0.78); font-size: 11.5px; line-height: 18px;
-    cursor: pointer; white-space: nowrap;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    flex: 0 0 auto; display: inline-flex; align-items: center;
+    padding: 5px 14px; border-radius: 999px; box-sizing: border-box;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.7); font-size: 12.5px; line-height: 1.2;
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
   }
-  .flip-search-toolbar .fs-chip:hover { background: var(--glass-hover); color: #fff; }
+  .flip-search-toolbar .fs-chip:hover { background: rgba(255,255,255,0.12); }
   .flip-search-toolbar .fs-chip.on {
-    background: rgba(10,132,255,0.18); border-color: rgba(10,132,255,0.5); color: #8CC2FF;
+    background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.16); color: #fff; font-weight: 600;
   }
-  .flip-search-toolbar .fs-chip.fs-sort-chip.on {
-    background: rgba(48,209,88,0.16); border-color: rgba(48,209,88,0.45); color: var(--c-success);
-  }
+  .flip-search-toolbar .fs-chip.on:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.2); }
   .flip-search-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; scrollbar-width: thin; }
   .flip-search-empty { text-align: center; padding: 48px 16px; color: rgba(255,255,255,0.5); font-size: 13px; }
   .flip-search-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 20px; gap: 16px; }
@@ -5820,7 +5818,26 @@ window.closeFlipSearch = function() {
   if (_flipSearchModal) _flipSearchModal.style.display = 'none';
 };
 // ===== 搜索浮层：筛选 / 排序（2.2.9）=====
-// 结果先落 window._flipState，筛选与排序只重绘列表，不重新请求
+// 与主搜索页 #ptFilterBar 共用同一套配置与同一套筛选/排序实现：
+//   筛选 chip 单选，点「全部」复位；排序 chip 同维度只有一个，点已选中的 = 翻转方向（↓/↑）。
+// 结果先落 window._flipState，筛选与排序只重绘列表，不重新请求。
+const SEARCH_FILTER_CONFIG = {
+  pt: {
+    filters: [['all', '全部'], ['seed100', '做种≥100'], ['seed10', '做种≥10'], ['4k', '4K'], ['1080p', '1080p'], ['bluray', 'BluRay']],
+    sorts: [['seeders', '做种'], ['size', '大小'], ['date', '时间']],
+    defaultSort: 'seeders',
+  },
+  online: {
+    filters: [['all', '全部'], ['ddrk', '低端影视'], ['domain', '域名直连']],
+    sorts: [['default', '默认'], ['time', '时间']],
+    defaultSort: 'default',
+  },
+  pansou: {
+    filters: [['all', '全部'], ['haspass', '有提取码'], ['nopass', '无提取码']],
+    sorts: [['default', '默认'], ['size', '大小'], ['time', '时间']],
+    defaultSort: 'default',
+  },
+};
 function _flipLabelOf(r, source) {
   if (source === 'pansou') {
     const m = window._PAN_TYPE || {};
@@ -5828,33 +5845,38 @@ function _flipLabelOf(r, source) {
   }
   return r.site || r.source || '';
 }
-function _fsSize(s) {
-  const m = String(s || '').replace(/,/g, '').match(/([0-9.]+)\s*(TB|GB|MB|KB|B)\b/i);
-  if (!m) return -1;
-  const mul = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824, TB: 1099511627776 }[m[2].toUpperCase()] || 1;
-  return parseFloat(m[1]) * mul;
+function _flipSortChipText(c, active, dir) {
+  const base = c.dataset.base || '';
+  if (base === '默认') return base;
+  return base + (active && dir === 'asc' ? '↑' : '↓');
 }
-window.flipFilterSite = function (el) {
+window.flipPickFilter = function (el) {
   const st = window._flipState; if (!st || !el) return;
-  const v = el.dataset.src;
-  const chips = document.querySelectorAll('#flipSrcChips .fs-chip');
-  if (v === '__all') {
-    st.sites.clear();
-  } else if (st.sites.has(v)) {
-    st.sites.delete(v);
-  } else {
-    st.sites.add(v);
+  if (el.dataset.f != null) {
+    st.filter = el.dataset.f;
+    document.querySelectorAll('#flipFilterChips .fs-chip').forEach(c => c.classList.toggle('on', c.dataset.f === st.filter));
+  } else if (el.dataset.site != null) {
+    st.site = el.dataset.site === '__all' ? '' : el.dataset.site;
+    document.querySelectorAll('#flipSiteChips .fs-chip').forEach(c => {
+      c.classList.toggle('on', (c.dataset.site === '__all' ? '' : c.dataset.site) === st.site);
+    });
   }
-  chips.forEach(c => {
-    if (c.dataset.src === '__all') c.classList.toggle('on', st.sites.size === 0);
-    else c.classList.toggle('on', st.sites.has(c.dataset.src));
-  });
   renderFlipResults();
 };
 window.flipSortBy = function (el) {
   const st = window._flipState; if (!st || !el) return;
-  st.sort = el.dataset.sort || 'default';
-  document.querySelectorAll('.fs-sort .fs-chip').forEach(c => c.classList.toggle('on', c.dataset.sort === st.sort));
+  if (el.dataset.sort === st.sort) {
+    // 点已选中的排序 = 翻转方向（与主搜索页一致；「默认」不再翻转）
+    if (el.dataset.sort !== 'default') st.dir = st.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    st.sort = el.dataset.sort;
+    st.dir = 'desc';
+  }
+  document.querySelectorAll('#flipSortChips .fs-chip').forEach(c => {
+    const active = c.dataset.sort === st.sort;
+    c.classList.toggle('on', active);
+    c.textContent = _flipSortChipText(c, active, st.dir);
+  });
   renderFlipResults();
 };
 window.renderFlipResults = function () {
@@ -5862,25 +5884,11 @@ window.renderFlipResults = function () {
   const list = document.getElementById('flipResultList'); if (!list) return;
   const source = st.source;
   const LABELS = { pansou: '网盘搜索', online: '在线观影', pt: '站点搜索' };
-  let rows = st.results.slice();
-  if (st.sites && st.sites.size) rows = rows.filter(r => st.sites.has(_flipLabelOf(r, source)));
-  const sort = st.sort || 'default';
-  if (sort === 'seed') rows.sort((a, b) => (Number(b.seeders) || 0) - (Number(a.seeders) || 0));
-  else if (sort === 'size_desc') rows.sort((a, b) => _fsSize(b.size) - _fsSize(a.size));
-  else if (sort === 'size_asc') rows.sort((a, b) => {
-    const x = _fsSize(a.size), y = _fsSize(b.size);
-    if (x < 0 && y < 0) return 0;
-    if (x < 0) return 1;
-    if (y < 0) return -1;
-    return x - y;
-  });
-  else if (sort === 'name') rows.sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'zh-Hans-CN'));
+  let rows = applySearchFilterSort(st.results, source, st.filter, st.sort, st.dir);
+  if (st.site) rows = rows.filter(r => _flipLabelOf(r, source) === st.site);
 
-  if (!rows.length) {
-    list.innerHTML = `<div class="flip-search-empty">当前筛选下没有结果，点「全部」恢复。</div>`;
-    return;
-  }
-  list.innerHTML = `<div class="torrent-list">` + rows.map(r => {
+  if (!rows.length) list.innerHTML = `<div class="flip-search-empty">当前筛选下没有结果，点「全部」恢复。</div>`;
+  else list.innerHTML = `<div class="torrent-list">` + rows.map(r => {
     const srcLabel = _flipLabelOf(r, source);
     const badge = `<span class="src-badge" data-src="${esc(source)}">${esc(srcLabel || LABELS[source])}</span>`;
     let subParts = [];
@@ -5903,7 +5911,7 @@ window.renderFlipResults = function () {
     </div>`;
   }).join('') + `</div>`
     + `<div style="padding:12px 6px 4px;text-align:center;opacity:0.55;font-size:12px;">共 ${rows.length} 条结果`
-    + `${(st.sites && st.sites.size) ? `（已筛选，原始 ${st.results.length} 条）` : ''} · 点击条目在新标签页打开</div>`;
+    + `${((st.filter && st.filter !== 'all') || st.site) ? `（已筛选，原始 ${st.results.length} 条）` : ''} · 点击条目在新标签页打开</div>`;
 };
 window.flipSearchGo = async function(source) {
   const body = document.getElementById('flipSearchBody');
@@ -5930,24 +5938,23 @@ window.flipSearchGo = async function(source) {
     uc:'UC网盘', magnet:'磁力', other:'其他', others:'其他',
   };
   window._PAN_TYPE = PAN_TYPE;
-  window._flipState = { source: source, results: results, sites: new Set(), sort: 'default' };
+  const cfg = SEARCH_FILTER_CONFIG[source] || SEARCH_FILTER_CONFIG.pansou;
+  window._flipState = { source: source, results: results, filter: 'all', sort: cfg.defaultSort, dir: 'desc', site: '' };
   const siteLabels = Array.from(new Set(results.map(r => _flipLabelOf(r, source))))
     .filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
-  const SORTS = [['default', '默认'], ['seed', '做种↓'], ['size_desc', '体积↓'], ['size_asc', '体积↑'], ['name', '名称']];
   body.innerHTML =
-    (siteLabels.length > 1
-      ? `<div class="flip-search-toolbar">
-          <span class="fs-label">筛选</span>
-          <div class="fs-src" id="flipSrcChips">
-            <span class="fs-chip on" data-src="__all" onclick="flipFilterSite(this)">全部</span>
-            ${siteLabels.map(l => `<span class="fs-chip" data-src="${esc(String(l))}" onclick="flipFilterSite(this)">${esc(String(l))}</span>`).join('')}
-          </div>
-          <span class="fs-label">排序</span>
-          <div class="fs-sort">
-            ${SORTS.map(([k, t]) => `<span class="fs-chip fs-sort-chip${k === 'default' ? ' on' : ''}" data-sort="${k}" onclick="flipSortBy(this)">${t}</span>`).join('')}
-          </div>
-        </div>`
-      : '') + `<div id="flipResultList"></div>`;
+    `<div class="flip-search-toolbar">
+      <div class="fs-row"><span class="fs-label">排序</span><div class="fs-chips" id="flipSortChips">
+        ${cfg.sorts.map(([k, t]) => `<span class="fs-chip${k === cfg.defaultSort ? ' on' : ''}" data-sort="${k}" data-base="${esc(t)}" onclick="flipSortBy(this)">${esc(t)}${t === '默认' ? '' : '↓'}</span>`).join('')}
+      </div></div>
+      <div class="fs-row"><span class="fs-label">筛选</span><div class="fs-chips" id="flipFilterChips">
+        ${cfg.filters.map(([k, t]) => `<span class="fs-chip${k === 'all' ? ' on' : ''}" data-f="${k}" onclick="flipPickFilter(this)">${esc(t)}</span>`).join('')}
+      </div></div>
+      ${siteLabels.length > 1 ? `<div class="fs-row"><span class="fs-label">站点</span><div class="fs-chips" id="flipSiteChips">
+        <span class="fs-chip on" data-site="__all" onclick="flipPickFilter(this)">全部</span>
+        ${siteLabels.map(l => `<span class="fs-chip" data-site="${esc(String(l))}" onclick="flipPickFilter(this)">${esc(String(l))}</span>`).join('')}
+      </div></div>` : ''}
+    </div>` + `<div id="flipResultList"></div>`;
   renderFlipResults();
 };
 
@@ -6458,40 +6465,20 @@ function toggleFilterPanel() {
   chev.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
-// 通用筛选栏配置
+// 通用筛选栏配置（与搜索浮层共用 SEARCH_FILTER_CONFIG，只有一套口径）
 function setupFilterBar(source) {
   const row = document.getElementById('dynamicFilterRow');
   const sortRow = document.getElementById('sortRow');
-  let html = '';
-  if (source === 'pt') {
-    html += '<div class="pt-filter-chip active" data-filter="all">全部</div>';
-    html += '<div class="pt-filter-chip" data-filter="seed100">做种≥100</div>';
-    html += '<div class="pt-filter-chip" data-filter="seed10">做种≥10</div>';
-    html += '<div class="pt-filter-chip" data-filter="4k">4K</div>';
-    html += '<div class="pt-filter-chip" data-filter="1080p">1080p</div>';
-    html += '<div class="pt-filter-chip" data-filter="bluray">BluRay</div>';
-    sortRow.innerHTML = '<div class="pt-filter-chip active" data-sort="seeders" data-dir="desc">做种↓</div>'
-      + '<div class="pt-filter-chip" data-sort="size" data-dir="desc">大小↓</div>'
-      + '<div class="pt-filter-chip" data-sort="date" data-dir="desc">时间↓</div>';
-  } else if (source === 'online') {
-    html += '<div class="pt-filter-chip active" data-filter="all">全部</div>';
-    html += '<div class="pt-filter-chip" data-filter="ddrk">低端影视</div>';
-    html += '<div class="pt-filter-chip" data-filter="domain">域名直连</div>';
-    sortRow.innerHTML = '<div class="pt-filter-chip active" data-sort="default">默认</div>'
-      + '<div class="pt-filter-chip" data-sort="time" data-dir="desc">时间↓</div>';
-  } else if (source === 'pansou') {
-    html += '<div class="pt-filter-chip active" data-filter="all">全部</div>';
-    html += '<div class="pt-filter-chip" data-filter="haspass">有提取码</div>';
-    html += '<div class="pt-filter-chip" data-filter="nopass">无提取码</div>';
-    sortRow.innerHTML = '<div class="pt-filter-chip active" data-sort="default">默认</div>'
-      + '<div class="pt-filter-chip" data-sort="size" data-dir="desc">大小↓</div>'
-      + '<div class="pt-filter-chip" data-sort="time" data-dir="desc">时间↓</div>';
-  } else {
-    sortRow.innerHTML = '<div class="pt-filter-chip active" data-sort="default">默认</div>';
-  }
-  row.innerHTML = html;
+  const cfg = SEARCH_FILTER_CONFIG[source] || SEARCH_FILTER_CONFIG.online;
+  row.innerHTML = cfg.filters.map(([k, t]) =>
+    `<div class="pt-filter-chip${k === 'all' ? ' active' : ''}" data-filter="${k}">${t}</div>`).join('');
+  sortRow.innerHTML = cfg.sorts.map(([k, t]) => {
+    const active = k === cfg.defaultSort;
+    return `<div class="pt-filter-chip${active ? ' active' : ''}" data-sort="${k}" data-dir="desc" data-base="${t}">`
+      + t + (t === '默认' ? '' : '↓') + '</div>';
+  }).join('');
   window._filter = 'all';
-  window._sort = 'default';
+  window._sort = cfg.defaultSort;
   window._sortDir = 'desc';
   // 重置为收起状态
   const _mtBar = document.getElementById('mediaTypeBar');
@@ -6512,35 +6499,37 @@ function sizeBytes(s) {
   const u = { B:1, KB:1024, MB:1048576, GB:1073741824, TB:1099511627776 };
   return parseFloat(m[1]) * (u[m[2]] || 1);
 }
-function renderGenericResults() {
-  const results = window._searchResults || [];
-  const source = window._searchSource;
-  let list = [...results];
-  const f = window._filter || 'all';
-  // 筛选
-  if (source === 'online') {
-    if (f === 'ddrk') list = list.filter(r => (r.source||'').includes('低端'));
-    if (f === 'domain') list = list.filter(r => (r.source||'').includes('域名'));
-  } else if (source === 'pansou') {
+// 搜索结果通用的筛选 + 排序（主搜索页与翻转卡浮层共用这一份实现）
+function applySearchFilterSort(results, source, filter, sort, sortDir) {
+  let list = [...(results || [])];
+  const f = filter || 'all';
+  // 降序 = 1（b 大则排前），升序 = -1
+  const dir = sortDir === 'asc' ? -1 : 1;
+  if (source === 'pansou') {
     if (f === 'haspass') list = list.filter(r => r.password);
     if (f === 'nopass') list = list.filter(r => !r.password);
-    const dir = window._sortDir === 'asc' ? 1 : -1;
-    if (window._sort === 'size') list.sort((a,b) => dir * (sizeBytes(b.size) - sizeBytes(a.size)));
-    else if (window._sort === 'time') list.sort((a,b) => dir * ((b.date||'').localeCompare(a.date||'')));
+    if (sort === 'size') list.sort((a, b) => dir * (sizeBytes(b.size) - sizeBytes(a.size)));
+    else if (sort === 'time') list.sort((a, b) => dir * String(b.date || '').localeCompare(String(a.date || '')));
   } else if (source === 'online') {
-    const dir2 = window._sortDir === 'asc' ? 1 : -1;
-    if (window._sort === 'time') list.sort((a,b) => dir2 * ((b.date||'').localeCompare(a.date||'')));
+    if (f === 'ddrk') list = list.filter(r => String(r.source || '').includes('低端'));
+    if (f === 'domain') list = list.filter(r => String(r.source || '').includes('域名'));
+    if (sort === 'time') list.sort((a, b) => dir * String(b.date || '').localeCompare(String(a.date || '')));
   } else if (source === 'pt') {
     if (f === 'seed100') list = list.filter(r => parseInt(r.seeders) >= 100);
     if (f === 'seed10') list = list.filter(r => parseInt(r.seeders) >= 10);
-    if (f === '4k') list = list.filter(r => /4k|2160|uhd|2160p/i.test(r.title||''));
-    if (f === '1080p') list = list.filter(r => /1080/i.test(r.title||''));
-    if (f === 'bluray') list = list.filter(r => /bluray|bdrip|remux/i.test(r.title||''));
-    const dir = window._sortDir === 'asc' ? 1 : -1;
-    if (window._sort === 'size') list.sort((a,b) => dir * ((parseFloat(b.size)||0)-(parseFloat(a.size)||0)));
-    else if (window._sort === 'date') list.sort((a,b) => dir * ((b.date||'').localeCompare(a.date||'')));
-    else list.sort((a,b) => dir * ((parseInt(b.seeders)||0)-(parseInt(a.seeders)||0)));
+    if (f === '4k') list = list.filter(r => /4k|2160|uhd/i.test(String(r.title || '')));
+    if (f === '1080p') list = list.filter(r => /1080/i.test(String(r.title || '')));
+    if (f === 'bluray') list = list.filter(r => /bluray|bdrip|remux/i.test(String(r.title || '')));
+    if (sort === 'size') list.sort((a, b) => dir * (sizeBytes(b.size) - sizeBytes(a.size)));
+    else if (sort === 'date') list.sort((a, b) => dir * String(b.date || '').localeCompare(String(a.date || '')));
+    else list.sort((a, b) => dir * ((parseInt(b.seeders) || 0) - (parseInt(a.seeders) || 0)));
   }
+  return list;
+}
+function renderGenericResults() {
+  const results = window._searchResults || [];
+  const source = window._searchSource;
+  let list = applySearchFilterSort(results, source, window._filter, window._sort, window._sortDir);
   // 应用 include/exclude chips
   const incl = getChips('include');
   const excl = getChips('exclude');
@@ -7649,13 +7638,11 @@ document.addEventListener('click', e => {
       window._sort = chip.dataset.sort;
       window._sortDir = chip.dataset.dir || 'desc';
     }
-    // 更新箭头
+    // 更新箭头（与搜索浮层同一套：默认项不带箭头，其余按当前方向显示 ↓/↑）
     sortRow.querySelectorAll('[data-sort]').forEach(c => {
-      if (c.classList.contains('active')) {
-        const base = c.dataset.sort;
-        c.textContent = base === 'seeders' ? '做种' : base === 'size' ? '大小' : base === 'date' ? '时间' : '默认';
-        if (base !== 'default') c.textContent += window._sortDir === 'desc' ? '↓' : '↑';
-      }
+      const base = c.dataset.base || '默认';
+      c.textContent = base + (base === '默认' ? ''
+        : (c.classList.contains('active') && window._sortDir === 'asc' ? '↑' : '↓'));
     });
   }
   applyFilters();
