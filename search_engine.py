@@ -20,6 +20,10 @@ import json
 import time
 import gzip
 import ssl
+import hmac
+import base64
+import secrets
+import hashlib
 import sqlite3
 import threading
 import urllib.parse
@@ -552,11 +556,104 @@ ENGINES = {
 # ---------------------------------------------------------------- 站点定义
 
 
+# ---------------------------------------------------------------- 站点 cookie 落盘加密
+# 纯标准库构造：HMAC-SHA256 计数器流加密 + encrypt-then-MAC（标准库没有 AES-GCM）。
+#   - 主密钥 32B，首次运行生成，单独落 .vault_key 且 chmod 600，不进 sites.json；
+#   - 每条记录独立 16B nonce，先加密再对 (nonce||密文) 算 MAC，校验用 compare_digest；
+#   - 落盘形态 "v1:<base64>"，读的时候透明解密，内存里始终是明文（引擎请求要用）。
+VAULT_FILE = '.vault_key'
+VAULT_MAGIC = 'v1:'
+_VAULT_CACHE = {}
+
+
+def _vault_master(data_dir):
+    path = os.path.join(data_dir or '.', VAULT_FILE)
+    if path in _VAULT_CACHE:
+        return _VAULT_CACHE[path]
+    key = b''
+    try:
+        with open(path, 'rb') as f:
+            key = f.read().strip()
+    except Exception:
+        pass
+    if len(key) < 32:
+        key = secrets.token_bytes(32)
+        try:
+            with open(path, 'wb') as f:
+                f.write(key)
+            try:
+                os.chmod(path, 0o600)
+            except Exception:
+                pass
+            print('[vault] 已生成站点 cookie 加密密钥 %s（权限 600）' % path, flush=True)
+        except Exception as e:
+            print('[vault] 写密钥失败，cookie 将以明文保存: %s' % e, flush=True)
+            _VAULT_CACHE[path] = b''
+            return b''
+    _VAULT_CACHE[path] = key
+    return key
+
+
+def _vault_keys(data_dir):
+    m = _vault_master(data_dir)
+    if not m:
+        return (b'', b'')
+    return (hmac.new(m, b'nexus-cookie-enc', hashlib.sha256).digest(),
+            hmac.new(m, b'nexus-cookie-mac', hashlib.sha256).digest())
+
+
+def _vault_stream(key, nonce, n):
+    out = bytearray()
+    i = 0
+    while len(out) < n:
+        out += hmac.new(key, nonce + i.to_bytes(8, 'big'), hashlib.sha256).digest()
+        i += 1
+    return bytes(out[:n])
+
+
+def is_encrypted(v):
+    return isinstance(v, str) and v.startswith(VAULT_MAGIC)
+
+
+def encrypt_secret(plain, data_dir):
+    """把明文 cookie 变成落盘形态；空值/已加密原样返回。"""
+    if not plain or not isinstance(plain, str) or is_encrypted(plain):
+        return plain
+    ke, km = _vault_keys(data_dir)
+    if not ke:
+        return plain
+    raw = plain.encode('utf-8')
+    nonce = secrets.token_bytes(16)
+    ct = bytes(a ^ b for a, b in zip(raw, _vault_stream(ke, nonce, len(raw))))
+    tag = hmac.new(km, nonce + ct, hashlib.sha256).digest()[:16]
+    return VAULT_MAGIC + base64.b64encode(nonce + ct + tag).decode()
+
+
+def decrypt_secret(token, data_dir):
+    """读盘形态还原成明文；不是密文就原样返回；校验失败返回空串（宁可当没登录，也不带病请求）。"""
+    if not is_encrypted(token):
+        return token
+    try:
+        blob = base64.b64decode(token[len(VAULT_MAGIC):])
+        nonce, ct, tag = blob[:16], blob[16:-16], blob[-16:]
+        ke, km = _vault_keys(data_dir)
+        if not ke:
+            return ''
+        if not hmac.compare_digest(tag, hmac.new(km, nonce + ct, hashlib.sha256).digest()[:16]):
+            raise ValueError('MAC 校验失败（密钥被替换过？）')
+        pt = bytes(a ^ b for a, b in zip(ct, _vault_stream(ke, nonce, len(ct))))
+        return pt.decode('utf-8')
+    except Exception as e:
+        print('[vault] 解密失败: %s' % e, flush=True)
+        return ''
+
+
 class SiteStore:
     """站点定义读写。首次启动时从 MoviePilot 的 user.db 导入。"""
 
     def __init__(self, data_dir):
-        self.path = os.path.join(data_dir or '.', SITES_FILE)
+        self.data_dir = data_dir or '.'
+        self.path = os.path.join(self.data_dir, SITES_FILE)
         self.sites = []
         self._lock = threading.Lock()
 
@@ -566,6 +663,10 @@ class SiteStore:
                 with open(self.path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 self.sites = data.get('sites') or []
+                # 磁盘上 cookie 是加密的，进内存必须是明文（请求头要用）
+                for s in self.sites:
+                    if isinstance(s, dict) and is_encrypted(s.get('cookie')):
+                        s['cookie'] = decrypt_secret(s['cookie'], self.data_dir)
                 return self.sites
             except Exception as e:
                 print('[sites] 读取 %s 失败: %s' % (self.path, e), flush=True)
@@ -578,11 +679,22 @@ class SiteStore:
 
     def save(self):
         with self._lock:
+            # 只加密落盘副本，内存里的明文不动
+            out = []
+            for s in self.sites:
+                c = dict(s)
+                if c.get('cookie'):
+                    c['cookie'] = encrypt_secret(c['cookie'], self.data_dir)
+                out.append(c)
             tmp = self.path + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump({'version': 1, 'updated': int(time.time()), 'sites': self.sites},
+                json.dump({'version': 1, 'updated': int(time.time()), 'sites': out},
                           f, ensure_ascii=False, indent=2)
             os.replace(tmp, self.path)
+            try:
+                os.chmod(self.path, 0o600)
+            except Exception:
+                pass
 
     @staticmethod
     def guess_engine(url, name=''):

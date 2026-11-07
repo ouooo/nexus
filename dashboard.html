@@ -247,7 +247,8 @@
     display:flex; align-items:center; justify-content:space-between;
     gap:16px;
     position:sticky; top:0; z-index:3000;
-    margin: 0 -32px 16px -32px;
+    /* 底边距跟全站模块节奏对齐（28），不再自成一档 16px */
+    margin: 0 -32px 28px -32px;
     padding:30px 32px 10px;
     background:
       linear-gradient(160deg, rgba(255,255,255,0.13) 0%, var(--glass-faint) 60%, rgba(255,255,255,0.03) 100%);
@@ -259,11 +260,12 @@
   .top-title { display:flex; align-items:center; gap:10px; }
   .top-title .top-icon {
     flex-shrink:0;
-    display:flex; align-items:center; justify-content:center; font-size:17px; opacity:0.85;
+    display:flex; align-items:center; justify-content:center; font-size:24px; opacity:0.85;
   }
   .top-title .top-text { display:flex; flex-direction:column; }
-  .top-title h1 { font-size:17px; font-weight:700; margin:0; letter-spacing:-0.01em; line-height:1.25; text-shadow:0 1px 3px rgba(0,0,0,0.15); }
-  .top-title p { font-size:11px; color:rgba(255,255,255,0.5); margin:0; text-shadow:0 1px 2px rgba(0,0,0,0.1); }
+  /* 页面标题 = Title 1（28px）：必须大于分组标题 h3(18px)，原来 17px 比分组标题还小，层级是反的 */
+  .top-title h1 { font-size:28px; font-weight:700; margin:0; letter-spacing:-0.01em; line-height:1.2; text-shadow:0 1px 3px rgba(0,0,0,0.15); }
+  .top-title p { font-size:11px; color:rgba(255,255,255,0.5); margin:2px 0 0; text-shadow:0 1px 2px rgba(0,0,0,0.1); }
   .breadcrumb { font-size:12.5px; color:rgba(255,255,255,0.45); }
   .breadcrumb .sep { margin:0 8px; opacity:0.5; }
   .breadcrumb .current { color:rgba(255,255,255,0.85); }
@@ -2169,8 +2171,8 @@
   @media (min-width: 1280px) {
     .overview-grid { display:block; }
     .overview-grid .full { width:100%; }
-    .overview-grid .hero-media { margin-bottom:22px; }
-    .overview-grid .section-title { margin:0 0 12px; }
+    .overview-grid .hero-media { margin-bottom:28px; }
+    .overview-grid .section-title { margin:0 0 16px; }
     .ov-col { margin-bottom:4px; }
     .ov-col-health .health-grid { margin-bottom:24px; }
     .ov-col-health #svcStrip { margin-bottom:0; }
@@ -2463,7 +2465,7 @@
       <button id="btnLogoutDesktop" title="退出登录" style="background:rgba(255,100,100,0.12);border:1px solid rgba(255,100,100,0.28);color:rgba(255,138,128,0.92);cursor:pointer;font-size:11px;padding:4px 10px;border-radius:8px;display:flex;align-items:center;gap:4px;">🚪 退出</button>
     </div>
 
-    <div class="side-ver"><span>v2.2.4 · 局域网</span></div>
+    <div class="side-ver"><span>v2.2.5 · 局域网</span></div>
   </aside>
 
   <!-- 移动端底部吸底 TabBar(窄屏显示) -->
@@ -3387,6 +3389,18 @@
               <input id="cfgAuthPass2" type="password" autocomplete="new-password" placeholder="再次输入新密码" style="width:100%;height:36px;padding:0 36px 0 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.25);color:#fff;font-size:13px;box-sizing:border-box;">
               <button type="button" onclick="togglePwd('cfgAuthPass2',this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;color:rgba(255,255,255,0.4);padding:4px 6px;">👁</button>
             </div></div>
+        </div>
+      </div>
+
+      <!-- 已授权客户端（会话令牌）：插件与网页登录都在这里，可单条撤销 -->
+      <div class="glass-card" data-tab="auth" id="sessionsCard" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <h3 style="font-size:15px;font-weight:700;">🔑 已授权客户端<span class="hint-ic" data-h="sessions" role="button" tabindex="0" aria-label="说明"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.3a2.7 2.7 0 0 1 5.3 0c0 1.9-2.6 2.3-2.6 4"/><line x1="12" y1="17.3" x2="12" y2="17.35"/></svg></span></h3>
+          <button onclick="loadSessions()" id="sessionsRefreshBtn" style="padding:5px 12px;border-radius:var(--radius-xs);border:1px solid var(--border-hi);background:var(--glass-2);color:var(--c-text-hi);font-size:12px;cursor:pointer;">刷新</button>
+        </div>
+        <p class="card-hint">网页登录令牌 30 天、浏览器插件令牌 7 天，用一次续一次。撤销后该客户端立刻失效，需重新登录。</p>
+        <div id="sessionsArea" style="display:grid;gap:8px;">
+          <div class="card-hint" style="margin:0;">读取中…</div>
         </div>
       </div>
 
@@ -4401,6 +4415,68 @@ function toggleAuthEdit() {
   if (view) view.style.display = window._authEditMode ? 'none' : 'grid';
   if (form) form.style.display = window._authEditMode ? 'grid' : 'none';
   if (btn) btn.textContent = window._authEditMode ? '✓ 完成' : '✏️ 编辑';
+}
+
+/* ===== 已授权客户端：列出所有会话，可单条撤销（插件令牌 7 天、网页 30 天） ===== */
+function _sessAgo(ts) {
+  if (!ts) return '—';
+  var d = Math.floor(Date.now() / 1000) - ts;
+  if (d < 60) return '刚刚';
+  if (d < 3600) return Math.floor(d / 60) + ' 分钟前';
+  if (d < 86400) return Math.floor(d / 3600) + ' 小时前';
+  return Math.floor(d / 86400) + ' 天前';
+}
+function _sessIn(ts) {
+  if (!ts) return '—';
+  var d = ts - Math.floor(Date.now() / 1000);
+  if (d <= 0) return '已到期';
+  if (d < 3600) return Math.floor(d / 60) + ' 分钟后';
+  if (d < 86400) return Math.floor(d / 3600) + ' 小时后';
+  return Math.floor(d / 86400) + ' 天后';
+}
+function _sessClientLabel(c) {
+  return c === 'extension' ? '🧩 浏览器插件' : '🖥️ 网页登录';
+}
+function renderSessions(data) {
+  var box = document.getElementById('sessionsArea');
+  if (!box) return;
+  var list = (data && data.sessions) || [];
+  if (!list.length) { box.innerHTML = '<div class="card-hint" style="margin:0;">还没有任何有效会话。</div>'; return; }
+  var cur = (data && data.current) || '';
+  box.innerHTML = list.map(function(s) {
+    var isMe = s.id === cur;
+    var ua = (s.ua || '').replace(/^Mozilla\/5\.0\s*/, '').slice(0, 46);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--glass-2);border:1px solid var(--border-lo);">'
+      + '<div style="min-width:0;flex:1;">'
+      + '<div style="font-size:13px;font-weight:600;color:var(--c-text-hi);">' + esc(_sessClientLabel(s.client))
+      + (isMe ? ' <span style="font-size:11px;font-weight:600;color:var(--c-accent);">当前</span>' : '') + '</div>'
+      + '<div style="font-size:11.5px;color:var(--c-text-low);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+      + esc(s.username || '—') + ' · 最近 ' + esc(_sessAgo(s.last_used)) + ' · ' + esc(_sessIn(s.expires)) + (ua ? ' · ' + esc(ua) : '') + '</div>'
+      + '</div>'
+      + '<button onclick="revokeSession(\'' + esc(s.id) + '\')" style="padding:5px 11px;border-radius:var(--radius-xs);border:1px solid var(--border-hi);background:transparent;color:var(--c-danger);font-size:12px;cursor:pointer;">撤销</button>'
+      + '</div>';
+  }).join('');
+}
+async function loadSessions() {
+  var box = document.getElementById('sessionsArea');
+  var btn = document.getElementById('sessionsRefreshBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '读取中…'; }
+  try {
+    var r = await fetchJSON('/sessions', 10000);
+    renderSessions(r);
+  } catch (e) {
+    if (box) box.innerHTML = '<div class="card-hint" style="margin:0;">读取失败：' + esc(String((e && e.message) || e)) + '</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
+  }
+}
+async function revokeSession(id) {
+  if (!id) return;
+  var r = await apiPost('/sessions/revoke', { id: id });
+  if (!r) { toast('撤销失败：无权限或会话不存在', 'error'); return; }
+  if (r.self) { toast('已撤销当前会话，请重新登录', 'info'); showLogin(); return; }
+  toast(r.revoked ? '已撤销，该客户端需重新登录' : '没有找到这条会话', r.revoked ? 'success' : 'info');
+  loadSessions();
 }
 
 function renderSvcConfig() {
@@ -9425,6 +9501,7 @@ function initSetTabs() {
     var rbac = document.getElementById('rbacCard');
     if (rbac && tab === 'auth') rbac.style.display = (_currentUser && _currentUser.is_admin) ? '' : 'none';
     if (tab === 'service' && !_ptSites.length) { try { loadPtSites(); } catch(e) {} }
+    if (tab === 'auth') { try { loadSessions(); } catch(e) {} }
   }
   tabs.querySelectorAll('.set-tab').forEach(function(b) {
     b.addEventListener('click', function() { showTab(b.dataset.tab); });
@@ -9436,6 +9513,8 @@ initSetTabs();
 
 // —— 全局暴露（onclick/事件属性/跨块依赖兼容） ——
 window.NEXUS = {};
+window.loadSessions = loadSessions;
+window.revokeSession = revokeSession;
 window.doLogin = doLogin;
 window.closeMoreDrawer = closeMoreDrawer;
 window.toggleMsgCenter = toggleMsgCenter;

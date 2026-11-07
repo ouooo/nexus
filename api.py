@@ -26,6 +26,7 @@ import secrets
 import subprocess
 import sqlite3
 import threading
+import ipaddress
 import urllib.request
 import urllib.parse
 import ssl
@@ -422,11 +423,42 @@ QB_USER = os.environ.get('DASH_QB_USER', '') or CONFIG['qb_user']
 QB_PASS = os.environ.get('DASH_QB_PASS', '') or CONFIG['qb_pass']
 QB_API_KEY = os.environ.get('DASH_QB_API_KEY', '') or (CONFIG.get('qb_api_key') or '')
 
+# ========== 写端点来源校验 ==========
+# 只放行「内网来源」：写站点库（插件导入）与 CookieCloud 推送这两个口子
+# 一旦暴露到公网就会被人灌脏数据/投毒，所以默认只认本机 + RFC1918 + Tailscale(100.64/10) + IPv6 ULA。
+# 可用环境变量 DASH_WRITE_ALLOW_CIDRS 或 config.json {"security":{"write_allow_cidrs":"...","*"}} 覆盖。
+DEFAULT_WRITE_CIDRS = ('127.0.0.0/8', '::1/128', '10.0.0.0/8', '172.16.0.0/12',
+                       '192.168.0.0/16', '100.64.0.0/10', 'fc00::/7', 'fe80::/10')
+
+def _write_cidrs():
+    raw = os.environ.get('DASH_WRITE_ALLOW_CIDRS') or ((CONFIG.get('security') or {}).get('write_allow_cidrs')) or ''
+    if isinstance(raw, (list, tuple)):
+        items = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        items = [x.strip() for x in str(raw).replace(';', ',').split(',') if x.strip()]
+    return items or list(DEFAULT_WRITE_CIDRS)
+
+def ip_in_cidrs(ip, cidrs):
+    if any(c == '*' for c in cidrs):
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+    except Exception:
+        return False
+    for c in cidrs:
+        try:
+            if addr in ipaddress.ip_network(c, strict=False):
+                return True
+        except Exception:
+            continue
+    return False
+
 # ========== 认证与会话 ==========
 SESSIONS = {}  # token -> {username, role, expires}
 SESSION_LOCK = threading.Lock()
 LOGIN_ATTEMPTS = {}  # ip -> {count, first_attempt}
 SESSION_TTL = 30 * 24 * 3600  # 30 天，后端重启后从磁盘恢复
+SESSION_TTL_PLUGIN = 7 * 24 * 3600   # 插件等外部客户端：短时效，可单独撤销
 RATE_LIMIT_MAX = 5
 RATE_LIMIT_WINDOW = 300  # 5 分钟
 
@@ -457,12 +489,25 @@ def _save_sessions():
 # 启动时恢复会话
 SESSIONS = _load_sessions()
 
-def create_session(username, role):
+def create_session(username, role, client='web', ua=''):
+    """建立会话。client 标出这是谁在用：web（网页登录）/ extension（浏览器插件）。
+    插件令牌只给 7 天、可单独撤销，网页会话保持 30 天。"""
     token = secrets.token_urlsafe(32)
+    ttl = SESSION_TTL_PLUGIN if client == 'extension' else SESSION_TTL
+    now = time.time()
     with SESSION_LOCK:
-        SESSIONS[token] = {'username': username, 'role': role, 'expires': time.time() + SESSION_TTL}
+        SESSIONS[token] = {'username': username, 'role': role, 'expires': now + ttl,
+                           'client': client, 'ua': (ua or '')[:120], 'created': now,
+                           'last_used': now}
     _save_sessions()
     return token
+
+def _session_uid(token):
+    """会话对外 id：token 的 sha256 前 12 位。列表里只给这个，永不回显完整令牌。"""
+    return hashlib.sha256((token or '').encode()).hexdigest()[:12]
+
+def _ttl_of(s):
+    return SESSION_TTL_PLUGIN if (s or {}).get('client') == 'extension' else SESSION_TTL
 
 def check_session(token):
     if not token:
@@ -475,9 +520,44 @@ def check_session(token):
             del SESSIONS[token]
             _save_sessions()
             return None
-        # 滑动续期：每次使用延长有效期
-        s['expires'] = time.time() + SESSION_TTL
+        # 滑动续期：每次使用延长有效期（按该会话自己的时效）
+        s['expires'] = time.time() + _ttl_of(s)
+        s['last_used'] = time.time()
         return s
+
+def list_sessions():
+    """供设置页展示：只给可读元信息 + 可撤销的 id，不含令牌本身。"""
+    now = time.time()
+    with SESSION_LOCK:
+        items = []
+        for tok, rec in list(SESSIONS.items()):
+            if rec.get('expires', 0) <= now:
+                continue
+            items.append({
+                'id': _session_uid(tok),
+                'username': rec.get('username', ''),
+                'role': rec.get('role', ''),
+                'client': rec.get('client') or 'web',
+                'ua': rec.get('ua', ''),
+                'created': int(rec.get('created') or 0),
+                'last_used': int(rec.get('last_used') or 0),
+                'expires': int(rec.get('expires') or 0),
+            })
+        items.sort(key=lambda x: -x['last_used'])
+        return items
+
+def revoke_session_by_uid(uid):
+    """按会话 id 撤销；返回撤销的条数。"""
+    if not uid:
+        return 0
+    n = 0
+    with SESSION_LOCK:
+        for tok in [t for t in SESSIONS if _session_uid(t) == uid]:
+            SESSIONS.pop(tok, None)
+            n += 1
+    if n:
+        _save_sessions()
+    return n
 
 def destroy_session(token):
     with SESSION_LOCK:
@@ -797,6 +877,8 @@ PATH_PERM = {
     '/api/incoming': None,  # 公开端点，外部服务/脚本推消息用
     '/api/config': 'settings',
     '/api/restart': 'settings:manage',
+    '/api/sessions': 'settings',
+    '/api/sessions/revoke': 'settings:manage',
 }
 
 def endpoint_perm(path):
@@ -2170,12 +2252,13 @@ def pt_save_sites(payload):
     path = os.path.join(DATA_DIR, _se.SITES_FILE)
     if os.path.exists(path):
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                for s in (json.load(f).get('sites') or []):
-                    sid = s.get('id')
-                    if sid and sid not in existing:
-                        existing[sid] = s
-                        order.append(sid)
+            # 走 SiteStore.load：磁盘上 cookie 是加密的，这里必须是解密后的明文，
+            # 否则合并出来的记录会把密文当 cookie 再写回去。
+            for s in _se.SiteStore(DATA_DIR).load():
+                sid = s.get('id')
+                if sid and sid not in existing:
+                    existing[sid] = s
+                    order.append(sid)
         except Exception:
             pass
     prev_count = len(order)          # 替换前先记住原有规模，用于"拒绝写空"守卫
@@ -3521,12 +3604,33 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('X-XSS-Protection', '1; mode=block')
 
+    def _cors_origin(self):
+        """CORS 收紧：只回同源与浏览器扩展（不再无条件 '*'，避免任意网页借用户会话读数据）"""
+        o = (self.headers.get('Origin') or '').strip()
+        if not o:
+            return None
+        if o.startswith('chrome-extension://') or o.startswith('moz-extension://'):
+            return o
+        try:
+            host = urllib.parse.urlparse(o).netloc
+            if host and host == (self.headers.get('Host') or ''):
+                return o
+        except Exception:
+            pass
+        return None
+
+    def _apply_cors(self):
+        o = self._cors_origin()
+        if o:
+            self.send_header('Access-Control-Allow-Origin', o)
+            self.send_header('Vary', 'Origin')
+
     def send_json(self, data, code=200):
         body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._apply_cors()
         self.send_header('Cache-Control', 'no-store')
         self._security_headers()
         self.end_headers()
@@ -3538,14 +3642,32 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._apply_cors()
         self.send_header('Cache-Control', 'no-store')
         self._security_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def _get_client_ip(self):
-        return self.client_address[0]
+        """真实来源 IP：直连取 peer；来自本机/反代时取 X-Forwarded-For 第一跳。"""
+        peer = self.client_address[0]
+        if ip_in_cidrs(peer, ('127.0.0.0/8', '::1/128')):
+            xff = (self.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+            if xff:
+                return xff
+        return peer
+
+    def _write_guard(self, what):
+        """写端点来源校验：不允许的网段直接 403，并说清怎么放行。"""
+        cidrs = _write_cidrs()
+        ip = self._get_client_ip()
+        if ip_in_cidrs(ip, cidrs):
+            return True
+        _log('WARN', 'auth', '拒绝写请求 %s：来源 %s 不在允许网段' % (what, ip))
+        self.send_json({'error': '来源不在允许网段内', 'ip': ip,
+                        'hint': '在 config.json 的 security.write_allow_cidrs 里放行该网段，或用 DASH_WRITE_ALLOW_CIDRS 覆盖'},
+                       code=403)
+        return False
 
     def _extract_token(self):
         auth = self.headers.get('Authorization', '')
@@ -3570,9 +3692,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._apply_cors()
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Nexus-Client')
         self.end_headers()
 
     def do_POST(self):
@@ -3598,8 +3720,10 @@ class Handler(BaseHTTPRequestHandler):
             if uinfo and phash and hashlib.sha256(password.encode()).hexdigest() == phash:
                 clear_attempts(ip)
                 role = uinfo['role']
-                token = create_session(username, role)
-                _log('INFO', 'auth', '登录成功 user=%s role=%s ip=%s' % (username, role, ip))
+                # 插件等外部客户端自带标记：给短时效令牌，便于单独撤销
+                _client = 'extension' if (self.headers.get('X-Nexus-Client') or '').lower().startswith('extension') else 'web'
+                token = create_session(username, role, client=_client, ua=self.headers.get('User-Agent', ''))
+                _log('INFO', 'auth', '登录成功 user=%s role=%s client=%s ip=%s' % (username, role, _client, ip))
                 self.send_json({
                     'ok': True, 'token': token, 'username': username,
                     'role': role, 'is_admin': uinfo['is_admin'],
@@ -3619,8 +3743,33 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'ok': True})
             return
 
+        # 撤销某个客户端令牌（设置页「已授权客户端」列表里的「撤销」）
+        if path == '/api/sessions/revoke':
+            s = self._require_auth()
+            if not s:
+                self.send_json({'error': '未授权'}, code=401)
+                return
+            role = s.get('role', 'admin')
+            if not _has_perm(get_role(role)['permissions'], 'settings:manage'):
+                self.send_json({'error': '无权限撤销会话'}, code=403)
+                return
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode('utf-8', errors='ignore') if length else '{}'
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            uid = (data.get('id') or '').strip()
+            me = _session_uid(self._extract_token())
+            n = revoke_session_by_uid(uid)
+            _log('INFO', 'auth', '撤销会话 id=%s 条数=%d by=%s' % (uid, n, s.get('username', '')))
+            self.send_json({'ok': True, 'revoked': n, 'self': (uid == me)})
+            return
+
         if path == '/cookiecloud/sync':
             # P0-2: 匿名投毒防护。CookieCloud 浏览器插件推送带 password，必须恒定时间比对。
+            if not self._write_guard('/cookiecloud/sync'):
+                return
             _cc_cfg = {}
             try:
                 with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
@@ -3814,7 +3963,9 @@ class Handler(BaseHTTPRequestHandler):
                 save_favs(favs)
             self.send_json({'ok': True, 'favorites': favs})
         elif path == '/api/sites/import':
-            # 浏览器插件一键导入：站点定义 + 插件实测探针（需 settings:manage）
+            # 浏览器插件一键导入：站点定义 + 插件实测探针（需 settings:manage + 内网来源）
+            if not self._write_guard('/api/sites/import'):
+                return
             s = self._require_auth()
             if not s:
                 self.send_json({'error': '未授权'}, code=401)
@@ -4183,6 +4334,16 @@ class Handler(BaseHTTPRequestHandler):
                 'day_up': round(day_tx / (1024**3), 1),
                 'uptime': get_uptime(),
             })
+
+        if path == '/api/sessions':
+            # 设置页「已授权客户端」：只回可读元信息与会话 id，不回令牌本身
+            self.send_json({
+                'sessions': list_sessions(),
+                'current': _session_uid(self._extract_token()),
+                'session_ttl_days': SESSION_TTL // 86400,
+                'plugin_ttl_days': SESSION_TTL_PLUGIN // 86400,
+            })
+            return
             return
         if path == '/api/version':
             # 部署指纹（公开）：api/dashboard/index 双文件哈希 + 启动时间，多会话协作对账基线
@@ -4923,8 +5084,29 @@ if __name__ == '__main__':
                     pass
                 _sem.release()
     _log('INFO', 'system', 'NEXUS API 服务启动 port=%d data_dir=%s' % (API_PORT, DATA_DIR))
-    print(f"NEXUS API on :{API_PORT}")
+    # ===== 原生 HTTPS（可选）：设了证书就自己上 TLS，不必再在容器外面套一层反代 =====
+    #   DASH_TLS_CERT=/data/tls/fullchain.pem  DASH_TLS_KEY=/data/tls/privkey.pem
+    # 证书也能从 config.json 的 {"tls": {"cert": "...", "key": "..."}} 取；self-signed 一样能用。
+    _tls = CONFIG.get('tls') or {}
+    _cert = os.environ.get('DASH_TLS_CERT', '') or (_tls.get('cert') or '')
+    _key = os.environ.get('DASH_TLS_KEY', '') or (_tls.get('key') or '')
+    _srv = S(('0.0.0.0', API_PORT), Handler)
+    _scheme = 'http'
+    if _cert and _key:
+        try:
+            if not (os.path.exists(_cert) and os.path.exists(_key)):
+                raise FileNotFoundError('证书/私钥路径不存在: %s / %s' % (_cert, _key))
+            _ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            _ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            _ctx.load_cert_chain(_cert, _key)
+            _srv.socket = _ctx.wrap_socket(_srv.socket, server_side=True)
+            _scheme = 'https'
+            _log('INFO', 'system', '已启用原生 HTTPS（TLS1.2+） cert=%s' % _cert)
+        except Exception as e:
+            _log('ERROR', 'system', 'HTTPS 启动失败，回退到 HTTP（明文）: %s' % e)
+            print('[CRITICAL] 配置了 TLS 但启动失败：%s —— 已回退 HTTP，请修正证书路径/权限' % e, flush=True)
+    print(f"NEXUS API on {_scheme}://0.0.0.0:{API_PORT}")
     try:
-        S(('0.0.0.0', API_PORT), Handler).serve_forever()
+        _srv.serve_forever()
     except KeyboardInterrupt:
         _log('INFO', 'system', 'NEXUS API 服务停止')
