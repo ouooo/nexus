@@ -1511,10 +1511,13 @@ def health_snapshot(data_dir='', mp_db_path=''):
             state = 'cool'
         elif h.get('fail_streak', 0) >= 1:
             state = 'warn'
+        search = s.get('search') or {}
         out.append({
             'id': sid, 'name': s.get('name'), 'engine': s.get('engine'),
             'enabled': s.get('enabled', True), 'base_url': s.get('base_url'),
             'requestDelay': _site_delay(s),
+            'search': {'path': search.get('path', ''), 'method': search.get('method', 'GET'),
+                       'keywordParam': search.get('keywordParam', 'search')},
             'has_cookie': bool((s.get('cookie') or '').strip()),
             'state': state, 'reason': reason or '',
             'fail_streak': h.get('fail_streak', 0), 'last_error': h.get('last_error', ''),

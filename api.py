@@ -2157,7 +2157,9 @@ def pt_save_sites(payload):
     store.sites = []
     incoming = payload.get('sites') if isinstance(payload, dict) else None
     if incoming is None:
-        incoming = [payload] if isinstance(payload, dict) else []
+        # 单站点对象：只有带 id / base_url 才当"一个站点"，否则就是空载荷
+        single = isinstance(payload, dict) and (payload.get('base_url') or payload.get('id'))
+        incoming = [payload] if single else []
     replace = bool(payload.get('replace')) if isinstance(payload, dict) else False
     remove_ids = set(payload.get('remove') or []) if isinstance(payload, dict) else set()
     if not incoming and not remove_ids and not replace:
@@ -2176,6 +2178,7 @@ def pt_save_sites(payload):
                         order.append(sid)
         except Exception:
             pass
+    prev_count = len(order)          # 替换前先记住原有规模，用于"拒绝写空"守卫
     if replace:
         order = []
         existing = {}
@@ -2183,12 +2186,30 @@ def pt_save_sites(payload):
     merged_map = {sid: existing[sid] for sid in order}
     incoming_ids = []
     for s in incoming or []:
-        if not isinstance(s, dict) or not s.get('base_url'):
+        if not isinstance(s, dict):
             continue
-        sid = s.get('id') or _se._site_id(s.get('name') or '', s.get('base_url') or '')
+        sid = s.get('id')
+        # 已有站点允许「局部更新」（只带 id + 要改的字段，例如只切启用开关）；
+        # 新站点必须带 base_url，否则地址无从确定，跳过而不是写脏数据。
+        if sid and sid in existing:
+            merged = dict(merged_map.get(sid) or {})
+            merged.update(s)
+        elif s.get('base_url'):
+            sid = sid or _se._site_id(s.get('name') or '', s.get('base_url') or '')
+            merged = dict(merged_map.get(sid) or {})
+            merged.update(s)
+        else:
+            continue
+        if not sid:
+            continue
+        # search 为局部合并：前端只改 path/method/keywordParam 时，
+        # 不能把该站已有的 paths/params/advance/body 等规则一并冲掉。
+        old = dict(merged_map.get(sid) or {})
+        if isinstance(s.get('search'), dict) and isinstance(old.get('search'), dict):
+            sm = dict(old['search'])
+            sm.update(s['search'])
+            merged['search'] = sm
         incoming_ids.append(sid)
-        merged = dict(merged_map.get(sid) or {})
-        merged.update(s)
         merged['id'] = sid
         merged.setdefault('name', sid)
         merged.setdefault('engine', 'nexusphp')
@@ -2204,10 +2225,14 @@ def pt_save_sites(payload):
             order.remove(rid)
 
     saved = [merged_map[sid] for sid in order if sid in merged_map]
-    if not saved and existing:
+    if not saved and prev_count:
         return {'saved': 0, 'error': '拒绝把站点库写成空（如确需清空请传 replace=true）'}
     store.sites = saved
     store.save()
+    try:
+        _se.reload_sites(DATA_DIR, MP_DB)   # 立即让运行中的引擎看到新库，不必重启
+    except Exception as e:
+        _log('WARN', 'search', '站点库重载失败: %s' % e)
     return {'saved': len(saved), 'added_or_updated': len(incoming_ids),
             'kept': max(0, len(existing) - len(incoming_ids))}
 

@@ -64,8 +64,9 @@ docker logs nexus 2>&1 | grep 初始口令
 
 - **流控**：单站默认 3 秒最小间隔（站点可配 `requestDelay`，设 0 关闭），全局限速令牌桶；遇到 `429` 按 `Retry-After` 给该站冷却，连续失败指数退避（3 秒起、最长 5 分钟）。被流控**主动跳过**的轮次不计入站点健康度，避免"因为自己慢就把站点判死"。
 - **可补救的诊断**：结果上方有站点状态条，每站给出「人话原因 + 证据（状态码 / 最终 URL / 响应片段）+ 一个可执行动作」，并可「重测这站」。诊断码：`dns` `tls` `timeout` `auth` `ratelimit` `challenge` `http` `parse` `api` `throttle-skip` `busy` `disabled` `unknown`。`403` 会先判是不是反爬挑战页、再判是不是登录页——两者补救动作完全不同。
+- **站点管理**：在「设置 → 服务与连接 → 🔍 站点搜索」卡片里，作为「站点搜索」这个搜索源自身的配置（与「服务分类名称」「常用服务」同级）。可启停、看状态与「原因 → 动作」、单站重测、编辑（引擎族/搜索路径/关键词参数/该站最小间隔/Cookie）、删除。搜索结果上方的状态条只报「本轮结果」，点它的「管理站点 ›」跳到该卡片；保存后引擎即时生效，无需重启容器。
 - **加站两条通路**：① 浏览器插件（见下）；② CookieCloud（`POST /cookiecloud/sync`，同一份数据既刷新 MoviePilot 站点表，也刷新本服务的站点 cookie）。
-- **接口**：`GET /api/search/pt?q=`（响应含 `results` 与 `diag`）、`GET /api/search/pt/sites`（每站 `state/reason/diag/has_cookie`）、`POST /api/search/pt/sites/test`（单站实测）、`POST /api/sites/import`（插件导入，**默认增改不删**，清空需显式 `replace`）。
+- **接口**：`GET /api/search/pt?q=`（响应含 `results` 与 `diag`）、`GET /api/search/pt/sites`（每站 `state/reason/diag/has_cookie/search`）、`POST /api/search/pt/sites`（增改/局部更新/`remove`/`replace`，默认增改不删）、`POST /api/search/pt/sites/test`（单站实测）、`POST /api/sites/import`（插件导入，**默认增改不删**，清空需显式 `replace`）。
 
 ### 浏览器插件（`nexus-extension/`）
 
@@ -80,12 +81,12 @@ docker logs nexus 2>&1 | grep 初始口令
 docker build \
   --build-arg GIT_REVISION=$(git rev-parse --short HEAD) \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  -t nexus:2.2.1 .
+  -t nexus:2.2.2 .
 
 # 打发布 tag 并推送
-docker tag nexus:2.2.1 bonanzalee/nexus:2.2.1
-docker tag nexus:2.2.1 bonanzalee/nexus:latest
-docker push bonanzalee/nexus:2.2.1
+docker tag nexus:2.2.2 bonanzalee/nexus:2.2.2
+docker tag nexus:2.2.2 bonanzalee/nexus:latest
+docker push bonanzalee/nexus:2.2.2
 docker push bonanzalee/nexus:latest
 ```
 
@@ -93,7 +94,7 @@ docker push bonanzalee/nexus:latest
 
 ## 版本
 
-当前 `2.2.1`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
+当前 `2.2.2`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
 
 ## 安全说明
 
