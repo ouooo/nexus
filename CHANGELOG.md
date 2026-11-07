@@ -2,6 +2,11 @@
 
 ## 2.2.9 — 2026-11-07
 
+### 首页「媒体库」统计按容器宽度自适应（不再固定 2 列换行）
+- `.lib-stats` 由 `repeat(2, 1fr)`（写死 2 列，三项必然 2+1 两行）改为 `repeat(auto-fit, minmax(108px, 1fr))`；≤768px 断点 `minmax(96px, 1fr)`、≤480px 断点 `minmax(88px, 1fr)`，两处旧的 `repeat(2, 1fr)` 覆盖已删除。
+- `.lib-stat .cat`（部电影/张专辑/部剧集）加 `white-space:nowrap + ellipsis`，与 `.num` 同口径，不再出现半截换行。
+- 口径：容器宽 ≥348px 时三项并排一行；更窄才回落到 2 列 / 1 列。生产实测 1440（卡片 413px）1 行、1024（卡片 323px）2 行、390（332px）1 行。
+
 ### 插件导入：双端都有回执（NEXUS 端）
 - `pt_import_sites()` 结束时报一次回执：新增 `_record_import_receipt()` 把 `{at, client, added, updated, saved, probe_ok, probe_bad, names}` 写进 `config.json` 的 `last_site_import`（`_atomic_write` 后重载 `CONFIG`）。
 - `pt_save_sites()` 返回值拆成 `{saved, added, updated, added_or_updated, kept}`，前端能分清「新增」与「更新」。
