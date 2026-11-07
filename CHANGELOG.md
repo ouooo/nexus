@@ -2,6 +2,42 @@
 
 ## 2.2.9 — 2026-11-07
 
+### 站点卡：长站名/长诊断不再顶出卡片（hc13）
+- 症状（用户截图复诉）：诊断长句越到卡右缘之外、「测试」按钮悬在卡外；媒体库统计块 1310px 宽下仍 2+1 换行；站点名被写成标签页标题。
+- `#ptSitesCard .pt-main` 补 `overflow:hidden`，`.pt-line` 补 `overflow:hidden`；`.pt-name` 由 `flex:none` 改 `flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis`（超长站名截断而不是把整行顶宽）；`.pt-reason` 补 `overflow-wrap:anywhere; word-break:break-word`。
+- 验收：1310 / 1440 / 1024 三个宽度、43 行实测 **越界行 0、按钮出界 0**。
+
+### 媒体库统计块：固定三列（hc4 之后第三次复诉的收口）
+- `.lib-stats` 主规则 `repeat(auto-fit, minmax(108px,1fr))` 会被 `auto-fit` 在 1310px 算成 2+1；改为 `grid-template-columns:repeat(3, minmax(0,1fr))`，768 / 480 两档断点同步改成 `repeat(3, minmax(0,1fr))`。
+- 新增 `@media (max-width:400px)`：`num` 17px、`cat` 10.5px、`padding 10px`，保证手机上三项仍并排。
+- 验收：1310px 下 `1,270 / 957 / 1,326` 三项同一行、同一 top。
+
+### 站名清洗：标签页标题一律不是站名（服务端 + 插件 1.2.3）
+- 服务端 `_site_display_name(name, base_url)`：长度 >20、含 `::` / ` | ` / ` - `、含「首页 / 查看主题 / 众筹 / 活动结束 / 论坛 / 登录」→ 一律退回注册域（去 `www.`）。`pt_save_sites()` 合并段统一走它，任何来源推上来的标题都进不了站点库。
+- 插件 1.2.3：新增 `looksLikeTabTitle()` / `sanitizeName(name, baseUrl)` / `sanitizeLocalSites()`；`upsertLocalSite()` 写入前清洗、`pushSites()` 推送前逐条清洗、`onInstalled` 时把本地已存的旧站名就地清洗一次。
+- 生产站点库 8 条历史标题式站名经产品接口清洗为域名（备份 `sites.json.bak.names2-20261107_204319`），回读 0 条残留。
+- 单测 `_test_sanitize_name.js`：9 组样例（含 `1PTBA.COM :: 首页 …`、`首页 :: DIC Music`、`Arctic Global Seed Vault :: PM (…)`）全部得到域名，`百川 / 聆听 / UBits` 这类真站名原样保留。
+
+### 服务配置地址不再编造网段（hc7）
+- `config.json` 的 `svc_ports` 13 项仍是 `{"host": "", "port": N}`，而后端取 `ov.get('host', s['host'])`：键在、值为空串 → 不回落，拼出 `http://:16880`；前端 `url.split(':')[0] || '192.168.1.1'` 又把空 host 兜底成假地址，于是全站地址变成 `192.168.x.x`。
+- 后端改 `_h = str(ov.get('host') or '').strip() or s['host']`（空串也回落），前端兜底改 `location.hostname`，保存侧改 `host ? {...} : { port, proto }`（不再把空字符串写回配置）。
+- 验收：13 条全部 `10.31.0.88:PORT`，面板 `127.0.0.1:28080`。
+
+### 站点测试失败后的补救入口（hc8–hc12，四轮才真绿）
+- 症状：诊断说「给它标记 insecure / 改成直连」，但界面上无处可点。
+- 新增 `_siteFixOps(s)` 按 `diag.code` 出按钮（`tls` → 跳过证书校验 + 自动换出口；`blocked` → 超时 10s + 自动换出口；`timeout` → 超时 10s + 自动换出口）、`fixSiteAndRetest()`、`retestAutoOutlet()`，`.pt-btn.fix` 琥珀样式。
+- **必须导出到 `window`**：整个文件包在 IIFE 里，内联 `onclick` 取不到未导出函数（hc8 因此全不生效）。
+- 归因重做：`greatposterwall / pt.keepfrds / pt.soulvoice` 的 `_ssl.c:993 handshake operation timed out` 是**出口把 TLS 握手掐断或太慢**，勾 insecure 救不回来（NAS 上 `curl -x 127.0.0.1:16001` 打聆音 302 但耗时 3.7s，3.5s 超时才是主因）。新增 `DIAG_CATALOG['blocked']`（文案：TLS 握手没完成（多半是太慢或被出口掐断），并明说「勾跳过证书校验没有用」），异常分流：`certificate/cert verify` → `tls`；`handshake / ssl+timeout / sslerror / unexpected_eof` → `blocked`；其余 timeout → `timeout`。
+- `_diag()` 填 `{status}` 占位符（原先 404 会把 `HTTP {status}` 原样甩给用户）。
+- 换出口：`search_site(..., no_throttle=False)` + `search_one(..., force_proxy=None)`，`api.pt_site_test(site_id, query='', auto_outlet=False)` 会把实际通的那条写回站点库（`proxy`），前端 toast 显示「换成走代理/直连后通了」或「两条出口都不通（直连timeout / 走代理timeout）」。
+- **单站间隔会静默吃掉第二条出口**：`_site_too_soon` 把重试挡成 `throttle-skip`，因此 `force_proxy is not None` 时放开单站间隔与全局配额。
+- 验收：接口 9 项全绿（归因 / 写回 / 两路 tried / 无占位符）、前端 6 项全绿（按钮集合 / 点击后真出 toast 且按钮复活）。
+
+### 插件图标：透明底四角星（1.2.2，替换白底瓦片）
+- 旧 `icon128` 全透明像素仅 3.0%，中心近白 `(176,240,239,255)`，即上文的「白底圆角瓦片 + 星标」；用户两次否决白底，要求与左侧导航栏 logo 同口径。
+- `_favicon_extract.py` 从 `dashboard.html` 第 7 行 base64 解出网页真正在用的 favicon（96×96、alpha bbox `(18,16,78,82)`、蓝→青渐变四角星、90.8% 透明）；`_icons_v3.py` 裁 alpha bbox → 8% 边距 → 512 主图 → 输出 `icon16/32/48/128` + `icon256`。
+- 前文 1.2.0 条目里的「白底圆角瓦片」为历史口径，现以透明底四角星为准。
+
 ### 设置页「站点搜索」卡宽度（布局错乱修复）
 - 根因：`.settings-grid { display:block; max-width:840px; }` 把整列卡片锁死 840px，宽屏下右侧「测试」按钮列落在卡外、`.pt-reason` 长句右溢到卡缘外。
 - 改为 `.settings-grid { display:block; width:100%; max-width:min(1180px,100%); }`：卡片随窗口放宽到 1180（上限）并在窄屏自动收缩。

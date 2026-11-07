@@ -1559,9 +1559,9 @@
     .journey-draw-cards { grid-template-columns: repeat(auto-fill, minmax(118px,1fr)); gap: 12px; }
   }
 
-  /* 媒体库统计：按容器宽度自适应列数——宽了就三项并排，窄了才换行（不再是写死 2 列） */
+  /* 媒体库统计：三项固定并排——容器够宽就不许换行（只有窄到撑不住时才纵向堆叠） */
   .lib-stats {
-    display:grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap:12px; margin-bottom:8px;
+    display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; margin-bottom:8px;
   }
   .lib-stat {
     background:var(--glass-faint); border-radius:var(--radius-md); padding:14px;
@@ -1573,6 +1573,12 @@
   @media (max-width: 640px) {
     .lib-stat { padding:12px; }
     .lib-stat .num { font-size:20px; }
+  }
+  /* 手机窄屏（<400px）三项仍并排，但数字/标签要缩，避免挤压成「1,3…」 */
+  @media (max-width: 400px) {
+    .lib-stat { padding:10px; }
+    .lib-stat .num { font-size:17px; }
+    .lib-stat .cat { font-size:10.5px; }
   }
   .lib-footer { font-size:11.5px; color:rgba(255,255,255,0.45); line-height:1.7; text-align:left !important; margin-top:12px; align-self:flex-start; }
   .lib-footer .check { color:var(--c-success); }
@@ -1855,7 +1861,7 @@
     .search-container { flex: 1; min-width: 0; }
     .search-box { width: 100% !important; height: 44px; }
     .msg-center { flex-shrink: 0; }
-    .lib-stats { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+    .lib-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .library-grid { grid-template-columns: 1fr; }
     .services-grid { grid-template-columns: 1fr; max-width:none; }
     .movie-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1994,7 +2000,7 @@
     .hero-media-left { padding: 18px 16px; }
     #overlayMeta { line-height: 1.5; }
     .lib-stats {
-      grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .top-right {
       flex-direction: row;
@@ -2147,6 +2153,8 @@
 #ptSitesCard .pt-btn.primary { background:#fff; color:#0a0a0c; border-color:transparent; }
 #ptSitesCard .pt-btn.danger { border-color:rgba(255,59,48,0.25); background:rgba(255,59,48,0.12); color:var(--c-danger); }
 #ptSitesCard .pt-btn.danger:hover { background:rgba(255,59,48,0.2); }
+#ptSitesCard .pt-btn.fix { border-color:rgba(255,159,10,0.28); background:rgba(255,159,10,0.12); color:#FFB340; }
+#ptSitesCard .pt-btn.fix:hover { background:rgba(255,159,10,0.2); }
 #ptSitesCard .pt-row { display:flex; align-items:center; gap:10px; padding:10px 12px;
   background:var(--glass-faint); border:1px solid var(--border-lo); border-radius:var(--radius-md); }
 #ptSitesCard .pt-list { display:grid; gap:8px; }
@@ -2156,12 +2164,13 @@
 #ptSitesCard .pt-dot.cool { background:var(--c-warning); }
 #ptSitesCard .pt-dot.off { background:var(--c-text-low); opacity:.5; }
 #ptSitesCard .pt-dot.bad { background:var(--c-danger); }
-#ptSitesCard .pt-main { flex:1 1 auto; min-width:0; }
+#ptSitesCard .pt-main { flex:1 1 auto; min-width:0; overflow:hidden; }
 #ptSitesCard .pt-name { color:var(--c-text-hi); font-size:13px; font-weight:600; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; }
 #ptSitesCard .pt-sub { color:var(--c-text-low); font-size:11px; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; }
-#ptSitesCard .pt-reason { color:var(--c-text-mid); font-size:11.5px; line-height:1.5; margin-top:2px; }
+#ptSitesCard .pt-reason { color:var(--c-text-mid); font-size:11.5px; line-height:1.5; margin-top:2px;
+  overflow-wrap:anywhere; word-break:break-word; }
 #ptSitesCard .pt-ops { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
 #ptSitesCard .pt-ops .pt-btn { height:26px; padding:0 9px; font-size:11px; }
 #ptSitesCard .pt-form { padding:12px; border-radius:var(--radius-md); background:var(--glass-faint);
@@ -2201,8 +2210,8 @@
 #sessionsArea::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:3px; }
 
 /* 站点搜索：站名与其副标题同一行，副标题过长时省略 */
-#ptSitesCard .pt-line { display:flex; align-items:baseline; gap:8px; min-width:0; }
-#ptSitesCard .pt-name { flex:none; }
+#ptSitesCard .pt-line { display:flex; align-items:baseline; gap:8px; min-width:0; overflow:hidden; }
+#ptSitesCard .pt-name { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 #ptSitesCard .pt-sub { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 /* 站点启用状态：编辑态才是复选框（勾选=启用），非编辑态不出现 */
 #ptSitesCard .pt-row .pt-en { flex:0 0 auto; display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--c-text-low); }
@@ -4758,7 +4767,7 @@ function renderSvcConfig() {
   (window._svcData || []).forEach((a, i) => {
     const url = a.url || '';
     const proto = /^https:\/\//.test(url) ? 'https' : 'http';
-    const host = url.replace(/^https?:\/\//, '').split(':')[0] || '192.168.1.1';
+    const host = url.replace(/^https?:\/\//, '').split(':')[0] || location.hostname;
     const alias = (window._svcAliases || {})[a.key || a.name] || '';
     if (!edit) {
       // 只读模式：纯展示一行
@@ -5312,7 +5321,8 @@ async function saveConfig() {
       const host = m ? m[1] : '';
       const port = m ? parseInt(m[2]) : a.port;
       const key = a.key || a.name;
-      svcPorts[key] = { host: host, port: port, proto: proto };
+      // host 留空就不写覆盖：后端会回落到内置内网地址，不会拼出 http://:port
+      svcPorts[key] = host ? { host: host, port: port, proto: proto } : { port: port, proto: proto };
       // 外网地址（可选）
       const extAddrEl = document.getElementById('svcExtAddr_' + i);
       const extProtoEl = document.getElementById('svcExtProto_' + i);
@@ -7399,6 +7409,7 @@ function _siteSub(s) {
   parts.push((s.requestDelay ? s.requestDelay : 0) + 's 间隔');
   parts.push(s.has_cookie ? '有 cookie' : '无 cookie');
   if (s.insecure) parts.push('跳过证书校验');
+  if (s.proxy) parts.push('走代理');
   if (s.timeout && Math.abs(Number(s.timeout) - 3.5) > 0.01) parts.push(Number(s.timeout) + 's 超时');
   if (s.state === 'cool' && s.cooldown_until) {
     var left = Math.max(0, Math.round((s.cooldown_until - Date.now() / 1000) / 60));
@@ -7454,6 +7465,70 @@ async function paintPtImportReceipt() {
   }
 }
 
+/* 站点失败后的「补救」按钮：把诊断里说的动作变成能点的按钮，而不是只写在原因后面 */
+function _siteFixOps(s) {
+  var code = (s.diag && s.diag.code) || '';
+  var out = [];
+  var btn = function(key, val, label) {
+    return '<button class="pt-btn fix" title="' + esc(label) + '，然后自动重测" '
+      + 'onclick="fixSiteAndRetest(\'' + esc(s.id) + '\',\'' + key + '\',' + JSON.stringify(val) + ')">' + esc(label) + '</button>';
+  };
+  // 出口不通（握手被掐 / 超时 / 证书）都可能靠「换出口」解决：直连 ↔ 走代理各试一次
+  var outletBtn = function() {
+    return '<button class="pt-btn fix" title="直连和走代理各测一次，谁通就把哪条记下来" '
+      + 'onclick="retestAutoOutlet(\'' + esc(s.id) + '\',this)">自动换出口</button>';
+  };
+  if (code === 'tls') {
+    if (!s.insecure) out.push(btn('insecure', true, '跳过证书校验'));
+    out.push(outletBtn());
+  } else if (code === 'blocked') {
+    if (Number(s.timeout || 0) < 10) out.push(btn('timeout', 10, '超时 10s'));
+    out.push(outletBtn());
+  } else if (code === 'timeout') {
+    if (Number(s.timeout || 0) < 10) out.push(btn('timeout', 10, '超时 10s'));
+    out.push(outletBtn());
+  }
+  return out.join('');
+}
+
+/* 改一个站点开关（insecure / timeout）后立刻重测，省掉「进编辑表单→保存→再回来测试」 */
+async function fixSiteAndRetest(id, key, value) {
+  var patch = { id: id };
+  patch[key] = value;
+  var r = await apiPost('/search/pt/sites', { sites: [patch] });
+  if (!r || !r.ok) { toast('保存失败，站点配置未改动', 'error'); return; }
+  var said = key === 'insecure' ? '已允许自签名证书（跳过证书校验），正在重测…'
+    : key === 'proxy' ? (value ? '已改为走代理，正在重测…' : '已改为直连，正在重测…')
+      : '已把该站超时调到 ' + value + 's，正在重测…';
+  toast(said, 'success');
+  await loadPtSites();
+  await testSiteDiag(id, null);
+}
+
+/* 自动换出口：后端拿当前出口测一次，失败就换另一个出口再测，通了就把开关写回站点库 */
+async function retestAutoOutlet(id, btn) {
+  if (!id) return;
+  var old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '换出口测试中…'; }
+  try {
+    var r = await apiPost('/search/pt/sites/test', { id: id, q: (window._ptQuery || ''), auto_outlet: true });
+    if (r && r.ok && r.switched_to) {
+      toast('换成' + (r.switched_to === 'proxy' ? '走代理' : '直连') + '后通了：' + (r.count || 0) + ' 条 · ' + (r.ms || 0) + 'ms（已记住这条出口）', 'success');
+    } else if (r && r.tried) {
+      var t = r.tried.map(function(x) { return (x.outlet === 'proxy' ? '走代理' : '直连') + (x.ok ? '通' : ((x.code || '失败'))); }).join(' / ');
+      toast('两条出口都不通（' + t + '）：' + ((r.diag && r.diag.label) || ''), 'error');
+    } else if (r && r.diag) {
+      toast(r.diag.label + '：' + (r.diag.action || r.diag.reason || ''), 'error');
+    } else {
+      toast((r && r.error) || '换出口测试失败', 'error');
+    }
+  } catch (e) {
+    toast('换出口测试失败', 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = old; }
+  if (document.getElementById('ptSitesCard')) loadPtSites();
+}
+
 function paintPtSites() {
   var host = document.getElementById('ptSitesList');
   var sum = document.getElementById('ptSitesSummary');
@@ -7501,14 +7576,16 @@ function paintPtSites() {
   var folded = shown.length - cap;
   shown.slice(0, cap).forEach(function(s) {
     // 非编辑态：只给单站「测试」；编辑态才出现启用复选框与「编辑 / 删除」
-    var ops = _ptSiteEditMode
+    // 两种模式下，失败结论旁都直接给「补救」按钮（跳过证书校验 / 改为直连 / 超时 10s），
+    // 用户不必先进编辑表单才知道能怎么办。
+    var ops = _siteFixOps(s) + (_ptSiteEditMode
       ? '<label class="pt-en" title="' + (s.enabled ? '已启用，取消勾选即停用' : '已停用，勾选即启用') + '">'
         + '<input type="checkbox" class="tgl" ' + (s.enabled ? 'checked' : '') + ' onchange="toggleSiteEnabled(\'' + esc(s.id) + '\',this.checked)">'
         + '启用</label>'
         + '<button class="pt-btn" onclick="testSiteDiag(\'' + esc(s.id) + '\',this)">测试</button>'
         + '<button class="pt-btn" onclick="openSiteForm(\'' + esc(s.id) + '\')">编辑</button>'
         + '<button class="pt-btn danger" onclick="deleteSite(\'' + esc(s.id) + '\')">删除</button>'
-      : '<button class="pt-btn" onclick="testSiteDiag(\'' + esc(s.id) + '\',this)">测试</button>';
+      : '<button class="pt-btn" onclick="testSiteDiag(\'' + esc(s.id) + '\',this)">测试</button>');
     body += '<div class="pt-row">'
       + '<span class="pt-dot ' + _siteTone(s) + '"></span>'
       + '<div class="pt-main"><div class="pt-line"><span class="pt-name">' + esc(s.name || s.id) + '</span>'
@@ -10029,6 +10106,8 @@ window.saveSiteForm = saveSiteForm;
 window.toggleSiteEnabled = toggleSiteEnabled;
 window.deleteSite = deleteSite;
 window.testSiteDiag = testSiteDiag;
+window.fixSiteAndRetest = fixSiteAndRetest;
+window.retestAutoOutlet = retestAutoOutlet;
 if (typeof fetchJSON !== 'undefined') window.fetchJSON = fetchJSON;
 if (typeof apiPost !== 'undefined') window.apiPost = apiPost;
 if (typeof CONFIG !== 'undefined') window.CONFIG = CONFIG;
