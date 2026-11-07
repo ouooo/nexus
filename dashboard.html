@@ -2244,7 +2244,7 @@
     .ov-col-health #svcStrip { margin-bottom:0; }
     /* 设置页三列布局 */
     /* 设置页单列整洁排版：卡片自上而下堆叠，统一宽度与间距 */
-    .settings-grid { display:block; max-width:840px; }
+    .settings-grid { display:block; width:100%; max-width:min(1180px, 100%); }
     .settings-grid > .glass-card { margin-bottom:18px; }
     #rbacRolesArea:empty { display:none; }
 
@@ -7407,31 +7407,50 @@ function _siteSub(s) {
   return parts.join(' · ');
 }
 
-// 插件导入回执：插件端推完 NEXUS 会把这个写进 config，这里一句话显示，双端对得上
+// 插件回执：插件端推完 NEXUS 会把这个写进 config，这里一句话显示，双端对得上
+// 两种来源：last_site_import（导入站点定义）、last_cookie_sync（扫描已开站点只喂登录态）
 async function paintPtImportReceipt() {
   var el = document.getElementById('ptSitesImport');
   if (!el) return;
-  var r = null;
+  var cfg = null;
   try {
     if (!window._ptImportCfg) window._ptImportCfg = await _japi('/api/config');
-    r = (window._ptImportCfg || {}).last_site_import || null;
+    cfg = window._ptImportCfg || {};
   } catch (e) { return; }
-  if (!r || !r.at) { el.hidden = true; el.innerHTML = ''; return; }
+  var imp = cfg.last_site_import || null;
+  var ck = cfg.last_cookie_sync || null;
+  var r = null, kind = '';
+  if (imp && imp.at && (!ck || !ck.at || imp.at >= ck.at)) { r = imp; kind = 'import'; }
+  else if (ck && ck.at) { r = ck; kind = 'scan'; }
+  if (!r) { el.hidden = true; el.innerHTML = ''; return; }
   var d = new Date(r.at * 1000);
   var pad = function(n) { return (n < 10 ? '0' : '') + n; };
   var when = pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   var bad = r.probe_bad || [];
-  var txt = '插件导入 · ' + (r.added ? '新增 ' + r.added + ' 站' : '无新增')
-    + (r.updated ? ' · 更新 ' + r.updated + ' 站' : '')
-    + ' · ' + when
-    + (r.probe_ok ? ' · ' + r.probe_ok + ' 站实测正常' : '');
-  if (bad.length) txt += ' · ' + bad.length + ' 站待处理（' + bad.map(function(b) { return b.label; }).join(' / ') + '）';
+  var txt, tone = bad.length ? ' warn' : '';
+  if (kind === 'import') {
+    txt = '插件导入 · ' + (r.added ? '新增 ' + r.added + ' 站' : '无新增')
+      + (r.updated ? ' · 更新 ' + r.updated + ' 站' : '')
+      + ' · ' + when
+      + (r.probe_ok ? ' · ' + r.probe_ok + ' 站实测正常' : '');
+    if (bad.length) txt += ' · ' + bad.length + ' 站待处理（' + bad.map(function(b) { return b.label; }).join(' / ') + '）';
+  } else {
+    txt = '插件扫描 · 同步 ' + (r.domains || 0) + ' 站登录态'
+      + (r.sites_updated ? ' · 站点库更新 ' + r.sites_updated : '')
+      + (r.mp_updated ? ' · MP 更新 ' + r.mp_updated : '')
+      + ' · ' + when;
+    if ((r.matched || []).length) txt += ' · 命中 ' + r.matched.slice(0, 3).join(' / ');
+  }
   el.hidden = false;
-  el.innerHTML = '<span class="dot' + (bad.length ? ' warn' : '') + '"></span><span>' + txt.replace(/</g, '&lt;') + '</span>';
+  el.innerHTML = '<span class="dot' + tone + '"></span><span>' + txt.replace(/</g, '&lt;') + '</span>';
   // 刚推过来的（5 分钟内）额外弹一次 toast，避免用户没盯着这张卡就漏掉
   if (r.at * 1000 > Date.now() - 300000 && !window._ptImportToasted) {
     window._ptImportToasted = true;
-    toast('浏览器插件刚导入：新增 ' + (r.added || 0) + ' 站 / 更新 ' + (r.updated || 0) + ' 站', 'success');
+    if (kind === 'import') {
+      toast('浏览器插件刚导入：新增 ' + (r.added || 0) + ' 站 / 更新 ' + (r.updated || 0) + ' 站', 'success');
+    } else {
+      toast('浏览器插件刚扫描：同步 ' + (r.domains || 0) + ' 站登录态 / 站点库更新 ' + (r.sites_updated || 0) + ' 站', 'success');
+    }
   }
 }
 
