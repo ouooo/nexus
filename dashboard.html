@@ -1163,7 +1163,7 @@
   }
   .torrent-icon {
     width:40px; height:40px; border-radius:var(--radius-xs);
-    background:rgba(239,68,68,0.15); display:flex;
+    background:rgb(68 141 239 / 15%); display:flex;
     align-items:center; justify-content:center; font-size:18px;
   }
   .torrent-main { flex:1; min-width:0; }
@@ -1205,6 +1205,7 @@
     padding:2px 8px; border-radius:6px; font-size:10px; font-weight:700;
     backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
     letter-spacing:0.02em; white-space:nowrap;
+    max-width:132px; overflow:hidden; text-overflow:ellipsis;
   }
   .src-badge[data-src="PT"], .src-badge[data-src="站点"], .src-badge[data-src="pt"] { background:rgba(48,209,88,0.2); color:var(--c-success); border:1px solid rgba(48,209,88,0.35); }
   .src-badge[data-src="网盘"], .src-badge[data-src="pansou"] { background:rgba(255,214,10,0.15); color:var(--c-fav); border:1px solid rgba(255,214,10,0.3); }
@@ -1547,6 +1548,9 @@
   .svc-chip { display:inline-flex; flex-direction:row; align-items:center; gap:8px; padding:8px 16px; border-radius:999px; white-space:nowrap; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); color:rgba(255,255,255,0.88); font-size:13px; font-weight:600; line-height:1; flex-shrink:0; }
   .svc-chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; display:inline-block; }
   .svc-chip-name { flex-shrink:0; }
+  /* 总览「PT 站点」条：站点数量比集成服务多，chip 收一档 + 带延迟数字 */
+  #ptStrip .svc-chip { padding:6px 12px; font-size:12.5px; gap:6px; }
+  #ptStrip .svc-chip:hover { background:rgba(255,255,255,0.14) !important; }
 
   /* 服务卡片：宽屏固定 3 列（内容多、给足宽度；1440 下 3 列排布），≤1024px 由断点接管 */
   .services-grid {
@@ -2064,7 +2068,9 @@
   .search-filter-card #filterToggle:hover { background:rgba(255,255,255,0.12); }
   #ptFilterBar { flex-direction:column; gap:12px; margin-top:12px; }
 /* 站点状态条：一句人话摘要 + 可展开的原因/动作清单 */
-#ptSiteDiagBar { margin-top:12px; padding:12px 14px; border-radius:var(--radius-lg);
+/* 上下都要留出模块间距：状态条与上方筛选区 12px、与下方结果列表再 12px（列表自身 gap 只管条目之间，
+   首条不会自带外边距，只给上边距会让状态条和第一条结果贴在一起） */
+#ptSiteDiagBar { margin:12px 0; padding:12px 14px; border-radius:var(--radius-lg);
   background:var(--glass-faint); border:1px solid var(--border-lo); font-size:12px;
   color:var(--c-text-mid); line-height:1.5; }
 #ptSiteDiagBar .diag-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -2465,7 +2471,7 @@
       <button id="btnLogoutDesktop" title="退出登录" style="background:rgba(255,100,100,0.12);border:1px solid rgba(255,100,100,0.28);color:rgba(255,138,128,0.92);cursor:pointer;font-size:11px;padding:4px 10px;border-radius:8px;display:flex;align-items:center;gap:4px;">🚪 退出</button>
     </div>
 
-    <div class="side-ver"><span>v2.2.6 · 局域网</span></div>
+    <div class="side-ver"><span>v2.2.7 · 局域网</span></div>
   </aside>
 
   <!-- 移动端底部吸底 TabBar(窄屏显示) -->
@@ -2660,6 +2666,16 @@
         <p id="svcSummary">检测中…</p>
       </div>
       <div id="svcStrip" style="display:flex;flex-wrap:wrap;row-gap:10px;column-gap:6px;margin-bottom:24px;">
+        <!-- 动态生成 -->
+      </div>
+
+      <!-- PT 站点连通性与延迟（可在「设置 → 基础 → 首页展示」逐站勾选；点 chip 直接跳到该站） -->
+      <div class="section-title" id="ptStatusTitle" style="display:none;">
+        <span class="section-icon">🛰️</span>
+        <h3>PT 站点</h3>
+        <p id="ptStatusSummary">读取中…</p>
+      </div>
+      <div id="ptStrip" style="display:none;flex-wrap:wrap;row-gap:10px;column-gap:6px;margin-bottom:24px;">
         <!-- 动态生成 -->
       </div>
       </div><!-- /ov-col-health -->
@@ -3514,6 +3530,8 @@
         <div id="healthShowCfg" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:14px;"></div>
         <div style="font-size:12px;color:rgba(255,255,255,0.55);margin-bottom:8px;">🔌 集成服务</div>
         <div id="svcShowCfg" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.55);margin:14px 0 8px;">🛰️ PT 站点（连通性 + 延迟）</div>
+        <div id="ptShowCfg" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
       </div>
 
       <!-- 连接凭证 -->
@@ -3977,7 +3995,7 @@ function renderHealthShowCfg() {
   box.innerHTML = items.map(function (it) {
     const k = it[0], label = it[1];
     return '<label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12.5px;">' +
-      '<input type="checkbox" class="ui-check" data-health-show="' + k + '"' + (hidden.indexOf(k) < 0 ? ' checked' : '') + '> ' + label + '</label>';
+      '<input type="checkbox" class="ui-check" data-health-show="' + k + '"' + (hidden.indexOf(k) < 0 ? ' checked' : '') + ' onchange="scheduleUiShowSave(this)"> ' + label + '</label>';
   }).join('');
 }
 function renderSvcShowCfg() {
@@ -3989,7 +4007,7 @@ function renderSvcShowCfg() {
   box.innerHTML = apps.map(function (a) {
     const k = a.key || a.name;
     return '<label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12.5px;">' +
-      '<input type="checkbox" class="ui-check" data-svc-show="' + esc(k) + '"' + (hidden.indexOf(k) < 0 ? ' checked' : '') + '> ' + esc(a.name) + '</label>';
+      '<input type="checkbox" class="ui-check" data-svc-show="' + esc(k) + '"' + (hidden.indexOf(k) < 0 ? ' checked' : '') + ' onchange="scheduleUiShowSave(this)"> ' + esc(a.name) + '</label>';
   }).join('');
 }
 function collectHealthShowCfg() {
@@ -4037,6 +4055,143 @@ function applySvcShowConfig() {
   strip.style.display = vis ? 'flex' : 'none';
   const sec = strip.previousElementSibling;
   if (sec && sec.classList && sec.classList.contains('section-title')) sec.style.display = vis ? '' : 'none';
+}
+
+// ===== PT 站点：总览「🛰️ PT 站点」状态条 + 「首页展示」逐站勾选 =====
+// 复用集成服务那套机制：每站在总览上是一枚 chip（连通性点 + 站点缩写 + 延迟），
+// 点 chip 直接跳该站首页；勾选状态存 ui_pt_hidden（存「未勾选」的 key 数组）。
+function _ptTone(s) {
+  const st = s && s.state ? s.state : 'ok';
+  if (st === 'cool') return { dot: '#FF453A', bg: 'rgba(255,69,58,0.15)', bd: 'rgba(255,69,58,0.3)', text: (s && s.reason) || '冷却中' };
+  if (st === 'warn') return { dot: '#FFD60A', bg: 'rgba(255,214,10,0.12)', bd: 'rgba(255,214,10,0.28)', text: (s && s.last_error) || '近期失败' };
+  if (st === 'off') return { dot: 'rgba(255,255,255,0.35)', bg: 'rgba(255,255,255,0.05)', bd: 'rgba(255,255,255,0.1)', text: '已停用' };
+  return { dot: '#30D158', bg: 'rgba(255,255,255,0.08)', bd: 'rgba(255,255,255,0.12)', text: '连通正常' };
+}
+function _ptMsText(s) {
+  if (!s || !s.enabled) return '—';
+  const ms = parseInt(s.last_ms || 0, 10);
+  return ms > 0 ? ms + 'ms' : '—';
+}
+async function loadPtStrip() {
+  const strip = document.getElementById('ptStrip');
+  const title = document.getElementById('ptStatusTitle');
+  if (!strip || !title) return;
+  let sites = [];
+  try {
+    const r = await ptGetJSON('/search/pt/sites');
+    sites = (r && r.sites) || [];
+  } catch (e) { sites = []; }
+  window._ptLive = sites;
+  // 已停用的站点不占总览空间：停用等于「不参与搜索」，首页也没必要挂它
+  const live = sites.filter(function (s) { return s.enabled !== false; });
+  if (!live.length) {
+    strip.style.display = 'none'; title.style.display = 'none';
+    return;
+  }
+  const okN = live.filter(function (s) { return s.state === 'ok'; }).length;
+  const sumEl = document.getElementById('ptStatusSummary');
+  if (sumEl) sumEl.textContent = okN + '/' + live.length + ' 站点正常 · 点站点直达';
+  strip.innerHTML = live.map(function (s) {
+    const t = _ptTone(s);
+    const ms = _ptMsText(s);
+    const name = s.name || s.id || '';
+    const href = s.base_url || '';
+    return `<a class="svc-chip" data-pt-key="${esc(s.id || name)}" href="${esc(href)}" target="_blank" rel="noopener"
+      title="${esc(name)} · ${esc(t.text)} · ${esc(ms === '—' ? '无延迟数据' : '最近一轮 ' + ms)}"
+      style="background:${t.bg};border:1px solid ${t.bd};text-decoration:none;color:inherit;">
+      <span class="svc-chip-dot" style="background:${t.dot};box-shadow:0 0 6px ${t.dot}"></span>
+      <span class="svc-chip-name">${esc(name)}</span>
+      <span style="font-size:11px;font-weight:500;opacity:0.55;margin-left:2px;">${esc(ms)}</span>
+    </a>`;
+  }).join('');
+  try { applyPtShowConfig(); } catch (e) {}
+}
+function renderPtShowCfg() {
+  const box = document.getElementById('ptShowCfg');
+  if (!box) return;
+  const hidden = window._uiPtHidden = Array.isArray(window._uiPtHidden) ? window._uiPtHidden : [];
+  const sites = window._ptLive || _ptSites || window._ptSites || [];
+  if (!sites.length) {
+    box.innerHTML = '<div style="font-size:12px;opacity:0.5;">站点库为空，导入站点后可在此勾选</div>';
+    // 还没有数据就去拉一次（拉回来再渲染，避免循环）
+    if (!window._ptShowCfgLoading) {
+      window._ptShowCfgLoading = true;
+      Promise.resolve().then(loadPtSites).then(function () {
+        window._ptShowCfgLoading = false;
+        window._ptLive = window._ptLive && window._ptLive.length ? window._ptLive : (_ptSites || []);
+        renderPtShowCfg();
+      }).catch(function () { window._ptShowCfgLoading = false; });
+    }
+    return;
+  }
+  box.innerHTML = sites.map(function (s) {
+    const k = s.id || s.name;
+    return '<label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:var(--radius-xs);border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12.5px;">' +
+      '<input type="checkbox" class="ui-check" data-pt-show="' + esc(k) + '"' + (hidden.indexOf(k) < 0 ? ' checked' : '') + ' onchange="scheduleUiShowSave(this)"> ' + esc(s.name || k) + '</label>';
+  }).join('');
+}
+function collectPtShowCfg() {
+  const out = [];
+  document.querySelectorAll('#ptShowCfg input[data-pt-show]').forEach(function (inp) {
+    if (!inp.checked) out.push(inp.getAttribute('data-pt-show'));
+  });
+  return out;
+}
+// 「首页展示」勾选即时生效 + 600ms 防抖落库。只提交被改动的那一组，避免把没渲染出来的组写成空数组。
+let _uiShowSaveTimer = null;
+function scheduleUiShowSave(el) {
+  // el 是刚被点的复选框（也兼容直接传组名），据此判断改的是哪一组
+  let group = (typeof el === 'string') ? el : '';
+  if (!group && el && el.hasAttribute) {
+    if (el.hasAttribute('data-pt-show')) group = 'pt';
+    else if (el.hasAttribute('data-svc-show')) group = 'svc';
+    else if (el.hasAttribute('data-health-show')) group = 'health';
+  }
+  try {
+    if (group === 'health') {
+      window._uiHealthHidden = collectHealthShowCfg();
+      applyHealthShowConfig();
+    } else if (group === 'svc') {
+      window._uiSvcHidden = collectSvcShowCfg();
+      applySvcShowConfig();
+    } else if (group === 'pt') {
+      window._uiPtHidden = collectPtShowCfg();
+      applyPtShowConfig();
+    }
+  } catch (e) {}
+  clearTimeout(_uiShowSaveTimer);
+  _uiShowSaveTimer = setTimeout(function () {
+    const payload = {};
+    if (group === 'health') payload.ui_health_hidden = window._uiHealthHidden || [];
+    if (group === 'svc') payload.ui_svc_hidden = window._uiSvcHidden || [];
+    if (group === 'pt') payload.ui_pt_hidden = window._uiPtHidden || [];
+    fetch(API_BASE + '/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('nexus_token') },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (typeof toast === 'function') toast(r && r.ok ? '首页展示已更新' : '保存失败（' + (r ? r.status : '网络错误') + '）', r && r.ok ? 'success' : 'error');
+    }).catch(function (e) {
+      if (typeof toast === 'function') toast('保存失败：' + (e && e.message ? e.message : e), 'error');
+    });
+  }, 600);
+}
+function applyPtShowConfig() {
+  const strip = document.getElementById('ptStrip');
+  const title = document.getElementById('ptStatusTitle');
+  if (!strip) return;
+  const hidden = window._uiPtHidden || [];
+  const chips = strip.children;
+  if (!chips.length) return; // 尚未渲染，保持默认
+  let vis = 0;
+  Array.prototype.forEach.call(chips, function (chip) {
+    const key = chip.getAttribute('data-pt-key');
+    const show = !key || hidden.indexOf(key) < 0;
+    chip.style.display = show ? '' : 'none';
+    if (show) vis++;
+  });
+  strip.style.display = vis ? 'flex' : 'none';
+  if (title) title.style.display = vis ? '' : 'none';
 }
 async function loadSettings() {
   try {
@@ -4151,6 +4306,7 @@ async function loadSettings() {
     seedSvcDefaults();
     window._uiHealthHidden = Array.isArray(cfg.ui_health_hidden) ? cfg.ui_health_hidden.slice() : [];
     window._uiSvcHidden = Array.isArray(cfg.ui_svc_hidden) ? cfg.ui_svc_hidden.slice() : [];
+    window._uiPtHidden = Array.isArray(cfg.ui_pt_hidden) ? cfg.ui_pt_hidden.slice() : [];
     window._healthLayout = {
       flex: cfg.ui_health_flex !== false,
       net_min: cfg.ui_health_net_min || 244,
@@ -4159,9 +4315,12 @@ async function loadSettings() {
     };
     renderHealthShowCfg();
     renderSvcShowCfg();
+    try { renderPtShowCfg(); } catch (e) {}
     try { applyHealthLayoutConfig(); } catch (e) {}
     try { applyHealthShowConfig(); } catch(e){}
     try { applySvcShowConfig(); } catch(e){}
+    try { applyPtShowConfig(); } catch(e){}
+    try { loadPtStrip(); } catch(e){}
     const fvInp = document.getElementById('cfgFavicon');
     if (fvInp) { fvInp.value = cfg.favicon || ''; try { applyFavicon(cfg.favicon); } catch(e){} }
     const pxInp = document.getElementById('cfgProxyUrl');
@@ -5194,6 +5353,7 @@ async function saveConfig() {
     share_base_url: (document.getElementById('cfgShareBase') || { value: '' }).value.trim(),
     ui_health_hidden: collectHealthShowCfg(),
     ui_svc_hidden: collectSvcShowCfg(),
+    ui_pt_hidden: collectPtShowCfg(),
     ui_health_flex: hl.flex,
     ui_health_net_min: hl.net_min,
     ui_health_net_max: hl.net_max,
@@ -6247,9 +6407,11 @@ function renderGenericResults() {
   };
   torrentsEl.innerHTML = list.map(r => {
     const srcKey = source;
-    let srcLabel = (r.source || '');
+    // PT 结果的来源是「站点」：优先用服务端带回的站点名（站点库里的缩写/别名），
+    // 兜底才是通用来源词，避免所有 PT 条目都退化成同一个 "PT" 徽标。
+    let srcLabel = (r.site || r.source || '');
     if (source === 'pansou') srcLabel = PAN_TYPE[r.type] || r.type || srcLabel;
-    let badge = `<span class="src-badge" data-src="${esc(srcKey)}">${esc(srcLabel || source.toUpperCase())}</span>`;
+    let badge = `<span class="src-badge" data-src="${esc(srcKey)}" title="${esc(srcLabel || source.toUpperCase())}">${esc(srcLabel || source.toUpperCase())}</span>`;
     let subParts = [];
     if (r.quality) subParts.push(`<span style="color:rgba(255,255,255,0.5);">${esc(r.quality)}</span>`);
     if (r.password) subParts.push(`<span style="color:#FFD60A;">提取码: ${esc(r.password)}</span>`);
@@ -8630,6 +8792,7 @@ async function fetchApps() {
       </div>`;
     }).join('');
     try { applySvcShowConfig(); } catch(e){}
+    try { loadPtStrip(); } catch(e){}
   }
   renderHomeServices();
 }
@@ -9400,7 +9563,7 @@ function openDetail(id) {
               ${d.logo
                 ? `<div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
                 <img src="${imgProxy(d.logo)}" alt="${esc(d.name)}" style="max-width:240px;max-height:68px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 2px 10px rgba(0,0,0,0.5));" onerror="this.style.display='none';">
-                <h1 style="font-size:24px;font-weight:800;margin:0;opacity:0.7;text-shadow:0 1px 4px rgba(0,0,0,0.3);line-height:1.25;">${esc(d.name)}</h1>
+                <h1 style="font-size:24px;font-weight:800;margin:0;opacity:0.4;text-shadow:0 1px 4px rgba(0,0,0,0.3);line-height:1.25;">${esc(d.name)}</h1>
               </div>`
                 : `<h1 style="font-size:24px;font-weight:800;margin-bottom:8px;text-shadow:0 1px 4px rgba(0,0,0,0.3);line-height:1.25;">${esc(d.name)}</h1>`}
               <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:2px;line-height:1.7;">
@@ -9515,6 +9678,7 @@ initSetTabs();
 
 // —— 全局暴露（onclick/事件属性/跨块依赖兼容） ——
 window.NEXUS = {};
+window.scheduleUiShowSave = scheduleUiShowSave;
 window.loadSessions = loadSessions;
 window.revokeSession = revokeSession;
 window.doLogin = doLogin;
