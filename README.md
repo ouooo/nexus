@@ -81,12 +81,12 @@ docker logs nexus 2>&1 | grep 初始口令
 docker build \
   --build-arg GIT_REVISION=$(git rev-parse --short HEAD) \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  -t nexus:2.2.3 .
+  -t nexus:2.2.4 .
 
 # 打发布 tag 并推送
-docker tag nexus:2.2.3 bonanzalee/nexus:2.2.3
-docker tag nexus:2.2.3 bonanzalee/nexus:latest
-docker push bonanzalee/nexus:2.2.3
+docker tag nexus:2.2.4 bonanzalee/nexus:2.2.4
+docker tag nexus:2.2.4 bonanzalee/nexus:latest
+docker push bonanzalee/nexus:2.2.4
 docker push bonanzalee/nexus:latest
 ```
 
@@ -94,7 +94,7 @@ docker push bonanzalee/nexus:latest
 
 ## 版本
 
-当前 `2.2.3`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
+当前 `2.2.4`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
 
 ## 安全说明
 
