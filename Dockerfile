@@ -8,7 +8,7 @@ ARG BUILD_DATE=unknown
 
 LABEL org.opencontainers.image.title="NEXUS" \
       org.opencontainers.image.description="NEXUS 家庭服务器仪表盘（dashboard.html + api.py，纯标准库，无第三方依赖）" \
-      org.opencontainers.image.version="2.2.2" \
+      org.opencontainers.image.version="2.2.3" \
       org.opencontainers.image.revision="${GIT_REVISION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 

@@ -1050,6 +1050,7 @@ def _build_request(site, query, proxy_url='', path=None):
         headers[k] = v
     return url, method, {'headers': headers, 'data': data,
                          'proxy': proxy_url if site.get('proxy') else '',
+                         'timeout': site.get('timeout') or SITE_TIMEOUT,
                          'verify': not site.get('insecure')}, spec
 
 
@@ -1094,6 +1095,7 @@ def search_site(site, query, proxy_url=''):
                 url, method=method,
                 headers=req.get('headers') or {},
                 data=req.get('data'),
+                timeout=req.get('timeout') or SITE_TIMEOUT,
                 proxy_url=req.get('proxy') or '',
                 verify=req.get('verify', True))
         except urllib.error.HTTPError as e:
@@ -1516,6 +1518,8 @@ def health_snapshot(data_dir='', mp_db_path=''):
             'id': sid, 'name': s.get('name'), 'engine': s.get('engine'),
             'enabled': s.get('enabled', True), 'base_url': s.get('base_url'),
             'requestDelay': _site_delay(s),
+            'timeout': s.get('timeout') or SITE_TIMEOUT,
+            'insecure': bool(s.get('insecure')),
             'search': {'path': search.get('path', ''), 'method': search.get('method', 'GET'),
                        'keywordParam': search.get('keywordParam', 'search')},
             'has_cookie': bool((s.get('cookie') or '').strip()),
