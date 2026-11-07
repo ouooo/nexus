@@ -2188,7 +2188,15 @@ def pt_sites_health():
         import search_engine as _se
     except Exception:
         return []
-    return _se.health_snapshot(DATA_DIR, MP_DB)
+    try:
+        rows = _se.health_snapshot(DATA_DIR, MP_DB)
+    except Exception:
+        return []
+    # 页面显示也过一遍清洗：库里若还残留插件早年写进来的标签页标题，列表里先显示成域名
+    for r in rows or []:
+        if isinstance(r, dict):
+            r['name'] = _site_display_name(r.get('name'), r.get('base_url') or '')
+    return rows
 
 
 def _site_display_name(name, base_url):
@@ -2199,7 +2207,7 @@ def _site_display_name(name, base_url):
     """
     host = ''
     try:
-        host = (urlsplit(str(base_url or '')).hostname or '').lower()
+        host = (urllib.parse.urlsplit(str(base_url or '')).hostname or '').lower()
     except Exception:
         host = ''
     if host.startswith('www.'):
@@ -2212,7 +2220,13 @@ def _site_display_name(name, base_url):
                 bad = True
                 break
     if bad:
-        return host or nm or '未命名站点'
+        # base_url 取不到域名时，再从标题本身抠出域名（「1PTBA.COM :: 首页 …」→ 1ptba.com）
+        m = re.match(r'(?:https?://)?([A-Za-z0-9][A-Za-z0-9\-]*\.(?:com|net|org|cc|club|me|io|cn|top|xyz|tv|info|in|us|uk|de|fr|jp|hk|tw|sg|ru|site|link|online|fun|pw))', nm, re.I)
+        if m:
+            return (host or m.group(1)).lower()
+        # 实在抠不出域名：只留分隔符前面那段（「BTSCHOOL :: 查看主题 …」→ BTSCHOOL）
+        head = re.split(r'\s*(?:::|\s\|\s|\s-\s)\s*', nm)[0].strip()[:20]
+        return host or head or '未命名站点'
     return nm
 
 
