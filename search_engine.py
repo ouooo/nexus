@@ -59,11 +59,14 @@ DIAG_CATALOG = {
             '本机解析不到这个站的域名。可能是站点换了域名，或 NAS 的 DNS 递归被断。',
             '把该站 base_url 改成新域名；若多个站同时报这个，先查 NAS 的 DNS 与出口代理。'),
     'tls': ('证书或 TLS 握手失败',
-            '站点证书过期、协议版本不兼容，或出口设备做了证书拦截。',
-            '给该站标记 insecure（跳过证书校验），或把它改成直连。'),
+            '站点证书过期、协议版本不兼容，或出口设备（代理/网关）做了证书拦截。',
+            '点该站右侧「跳过证书校验」重测；若还失败，点「自动换出口」再测。'),
+    'blocked': ('TLS 握手没完成（多半是太慢或被出口掐断）',
+                'TCP 已经连上，但 TLS 握手在超时时间内没走完——可能是这条出口慢（代理节点/TLS 1.3 握手要 4 秒以上），也可能是出口把该站的 443 阻断了。这种情况勾「跳过证书校验」没有用。',
+                '先点该站右侧「超时 10s」再测；仍不通就点「自动换出口」（直连 ↔ 走代理各试一次，通了就记住）。'),
     'timeout': ('请求超时',
             '站点在超时时间内没有响应。晚间高峰、站点负载高、或走了慢速代理节点都会这样。',
-            '给该站单独调大 timeout，或把该站配成直连；频繁超时会自动退避。'),
+            '点该站右侧「超时 10s」重测；若是出口慢或不通，点「自动换出口」重测。'),
     'auth': ('登录态失效',
             '站点把你当未登录用户（返回登录页）。cookie 过期、换了 IP、或管理员踢了会话。',
             '在浏览器里重新登录这个站，用插件「一键导入」把新 cookie 推给 NEXUS。'),
@@ -775,8 +778,13 @@ def _fill(tpl, mapping):
 def _diag(code, status=None, url=None, evidence=None, **extra):
     """构造结构化诊断：{code, label, reason, action, at, [status], [url], [evidence]}"""
     title, reason, action = DIAG_CATALOG.get(code, DIAG_CATALOG['unknown'])
-    reason = _fill(reason, extra)
-    action = _fill(action, extra)
+    fmt = dict(extra)
+    if status is not None:
+        fmt['status'] = status            # 文案里的 {status} 必须能填上，否则会把占位符原样甩给用户
+    fmt.setdefault('status', '?')
+    fmt.setdefault('detail', extra.get('detail') or '')
+    reason = _fill(reason, fmt)
+    action = _fill(action, fmt)
     d = {'code': code, 'label': title, 'reason': reason, 'action': action,
          'at': int(time.time())}
     if status is not None:
@@ -1166,11 +1174,12 @@ def _build_request(site, query, proxy_url='', path=None):
                          'verify': not site.get('insecure')}, spec
 
 
-def search_site(site, query, proxy_url=''):
+def search_site(site, query, proxy_url='', no_throttle=False):
     """单站搜索，返回 (items, meta)。
 
     失败一律转成结构化 meta['diag']（原因 + 证据 + 动作），并保留 meta['error'] 兼容旧前端。
     meta['skipped'] = True 表示因流控本轮主动没打，不计入站点健康度。
+    no_throttle=True 供「自动换出口」用：同一站在几秒内要连打两条出口，不能被单站间隔挡掉。
     """
     t0 = time.time()
     sid = site.get('id') or site.get('name')
@@ -1189,10 +1198,10 @@ def search_site(site, query, proxy_url=''):
 
     # —— 流控 ①：单站最小间隔（不足就本轮跳过，不排队、不拖首屏）——
     delay = _site_delay(site)
-    if _site_too_soon(sid, delay):
+    if not no_throttle and _site_too_soon(sid, delay):
         return done(_diag('throttle-skip', evidence='间隔 %.1fs' % delay), skipped=True)
     # —— 流控 ②：全局出站配额 ——
-    if not _GATE.take():
+    if not no_throttle and not _GATE.take():
         return done(_diag('busy', qps=GLOBAL_QPS, evidence='全局 %g/s' % GLOBAL_QPS), skipped=True)
 
     paths = _candidate_paths(site)
@@ -1243,13 +1252,20 @@ def search_site(site, query, proxy_url=''):
             low = reason.lower()
             if 'getaddrinfo' in low or 'name or service not known' in low or 'nodename' in low:
                 return done(_diag('dns', url=url, evidence=reason))
-            if 'certificate' in low or 'ssl' in low:
+            if 'certificate' in low or 'cert verify' in low or 'ssl: certificate' in low:
                 return done(_diag('tls', url=url, evidence=reason))
+            # 握手超时 / 握手中断：TCP 通了但 TLS 没建立起来 → 是出口被掐，勾 insecure 也救不回来
+            if 'handshake' in low or ('ssl' in low and ('timed out' in low or 'timeout' in low)) \
+                    or 'sslerror' in low or 'unexpected_eof' in low or 'eof occurred' in low:
+                return done(_diag('blocked', url=url, evidence=reason))
             if 'timed out' in low or 'timeout' in low:
                 return done(_diag('timeout', url=url, evidence=reason))
             return done(_diag('unknown', url=url, detail=reason, evidence=reason))
         except ssl.SSLError as e:
-            return done(_diag('tls', url=url, evidence=str(e)))
+            msg = str(e).lower()
+            if 'certificate' in msg or 'cert verify' in msg:
+                return done(_diag('tls', url=url, evidence=str(e)))
+            return done(_diag('blocked', url=url, evidence=str(e)))
         except (TimeoutError, OSError) as e:
             if 'timed out' in str(e).lower() or isinstance(e, TimeoutError):
                 return done(_diag('timeout', url=url, evidence=str(e)))
@@ -1597,12 +1613,20 @@ def _site_stat(site, meta):
             'skipped': bool(meta.get('skipped'))}
 
 
-def search_one(site_id, query, mp_db_path='', data_dir='', proxy_url=''):
-    """单站测试搜索（供站点管理页的「测试」按钮使用）"""
+def search_one(site_id, query, mp_db_path='', data_dir='', proxy_url='', force_proxy=None):
+    """单站测试搜索（供站点管理页的「测试」按钮使用）。
+
+    force_proxy=True/False 时，本次忽略该站已存的 proxy 开关，按指定出口跑一次
+    （「自动换出口」用：直连 ↔ 走代理各试一次，谁通就记住谁）。
+    """
     store, health = _get_ctx(data_dir, mp_db_path)
     for s in store.sites:
         if (s.get('id') or '') == site_id:
-            items, meta = search_site(s, query, proxy_url)
+            target = s
+            if force_proxy is not None:
+                target = dict(s)
+                target['proxy'] = bool(force_proxy)
+            items, meta = search_site(target, query, proxy_url, no_throttle=(force_proxy is not None))
             _record_meta(health, site_id, meta)
             return items, meta
     return [], {'ok': False, 'error': '站点不存在', 'diag': _diag('unknown', detail='站点不存在')}
@@ -1632,6 +1656,7 @@ def health_snapshot(data_dir='', mp_db_path=''):
             'requestDelay': _site_delay(s),
             'timeout': s.get('timeout') or SITE_TIMEOUT,
             'insecure': bool(s.get('insecure')),
+            'proxy': bool(s.get('proxy')),
             'search': {'path': search.get('path', ''), 'method': search.get('method', 'GET'),
                        'keywordParam': search.get('keywordParam', 'search')},
             'has_cookie': bool((s.get('cookie') or '').strip()),

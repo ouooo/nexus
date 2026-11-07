@@ -2191,17 +2191,81 @@ def pt_sites_health():
     return _se.health_snapshot(DATA_DIR, MP_DB)
 
 
-def pt_site_test(site_id, query=''):
-    """单站实测：一次性拿到条目数、耗时、以及结构化诊断（供前端「测试」按钮）"""
+def _site_display_name(name, base_url):
+    """站名只认「像站名」的值：标签页标题一律丢掉，退回注册域。
+
+    插件早先版本把 document.title 存成了站名（「1PTBA.COM :: 首页 1PTBA…」「查看主题 xxx」），
+    这类字符串又长又带页面文案，既不是站名，也会把站点卡撑出右边界。
+    """
+    host = ''
+    try:
+        host = (urlsplit(str(base_url or '')).hostname or '').lower()
+    except Exception:
+        host = ''
+    if host.startswith('www.'):
+        host = host[4:]
+    nm = re.sub(r'\s+', ' ', str(name or '')).strip()
+    bad = (not nm) or len(nm) > 20 or ('::' in nm) or (' | ' in nm) or (' - ' in nm)
+    if not bad:
+        for t in ('首页', '查看主题', '众筹', '活动结束', '论坛', '登录'):
+            if t in nm:
+                bad = True
+                break
+    if bad:
+        return host or nm or '未命名站点'
+    return nm
+
+
+def pt_site_test(site_id, query='', auto_outlet=False):
+    """单站实测：一次性拿到条目数、耗时、以及结构化诊断（供前端「测试」按钮）
+
+    auto_outlet=True：按当前出口测失败后，自动换另一个出口（直连 ↔ 走代理）再测一次；
+    哪条通就把它写进站点库（sites.json 的 proxy 开关），并回报 switched_to。
+    """
     try:
         import search_engine as _se
     except Exception as e:
         return {'ok': False, 'error': str(e), 'diag': None}
+    proxy = _current_proxy_url()
     items, meta = _se.search_one(site_id, query or 'test', mp_db_path=MP_DB,
-                                 data_dir=DATA_DIR, proxy_url=_current_proxy_url())
-    return {'ok': bool(meta.get('ok')), 'count': meta.get('count', 0), 'ms': meta.get('ms', 0),
-            'error': meta.get('error', ''), 'diag': meta.get('diag'),
-            'sample': [{'title': i.get('title'), 'size': i.get('size')} for i in items[:3]]}
+                                 data_dir=DATA_DIR, proxy_url=proxy)
+    res = {'ok': bool(meta.get('ok')), 'count': meta.get('count', 0), 'ms': meta.get('ms', 0),
+           'error': meta.get('error', ''), 'diag': meta.get('diag'),
+           'sample': [{'title': i.get('title'), 'size': i.get('size')} for i in items[:3]]}
+    if res['ok'] or not auto_outlet or not proxy:
+        return res
+    # 换出口：先看该站当前用的哪条，再切到另一条
+    try:
+        site = None
+        for s in _se.SiteStore(DATA_DIR).load():
+            if (s.get('id') or '') == site_id:
+                site = s
+                break
+        if not site:
+            return res
+        cur = bool(site.get('proxy'))
+        alt = not cur
+        alt_items, alt_meta = _se.search_one(site_id, query or 'test', mp_db_path=MP_DB,
+                                             data_dir=DATA_DIR, proxy_url=proxy,
+                                             force_proxy=alt)
+        res['tried'] = [
+            {'outlet': 'proxy' if cur else 'direct', 'ok': bool(meta.get('ok')),
+             'code': (meta.get('diag') or {}).get('code')},
+            {'outlet': 'proxy' if alt else 'direct', 'ok': bool(alt_meta.get('ok')),
+             'code': (alt_meta.get('diag') or {}).get('code')},
+        ]
+        if alt_meta.get('ok'):
+            # 只有换过去真的通了才落盘，避免把不能用的出口记下来
+            pt_save_sites({'sites': [{'id': site_id, 'proxy': alt}]})
+            res.update({'ok': True, 'count': alt_meta.get('count', 0), 'ms': alt_meta.get('ms', 0),
+                        'error': '', 'diag': None, 'switched_to': 'proxy' if alt else 'direct',
+                        'sample': [{'title': i.get('title'), 'size': i.get('size')} for i in alt_items[:3]]})
+        else:
+            res['diag'] = alt_meta.get('diag') or meta.get('diag')
+            res['error'] = alt_meta.get('error') or res['error']
+    except Exception as e:
+        res['outlet_error'] = str(e)[:120]
+    return res
 
 
 def pt_import_sites(payload):
@@ -2373,7 +2437,7 @@ def pt_save_sites(payload):
             merged['search'] = sm
         incoming_ids.append(sid)
         merged['id'] = sid
-        merged.setdefault('name', sid)
+        merged['name'] = _site_display_name(merged.get('name'), merged.get('base_url') or '')
         merged.setdefault('engine', 'nexusphp')
         merged.setdefault('enabled', True)
         merged.setdefault('search', {'path': '/torrents.php', 'method': 'GET', 'keywordParam': 'search'})
@@ -3588,7 +3652,15 @@ def get_services():
     for s in services:
         ov = overrides.get(s['name'])
         if ov:
-            s['public'] = f"{'https' if ov.get('proto','http')=='https' else 'http'}://{ov.get('host', s['host'])}:{ov.get('port', s['port'])}"
+            # 空字符串不等于「没配置」：svc_ports 里 host 存成 '' 时 ov.get('host', 默认值) 拿不到默认值，
+            # 会拼出 http://:16880。前端再从 URL 反解 host → 空 → 兜底显示成 192.168.1.1。这里按「空即回落内置」处理。
+            _h = str(ov.get('host') or '').strip() or s['host']
+            try:
+                _p = int(ov.get('port') or 0) or s['port']
+            except (TypeError, ValueError):
+                _p = s['port']
+            if _h:
+                s['public'] = f"{'https' if ov.get('proto','http')=='https' else 'http'}://{_h}:{_p}"
             # 不覆盖 host/port/use_https，保持内置内网直连配置
     result = []
     # 并行健康检查：串行 3s×N 曾达 34s 超过前端 30s 超时（服务监控卡片空白根因），改为并发，总耗时≈最慢服务
@@ -4151,7 +4223,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({'error': '缺少站点 id'}, code=400)
                 return
             try:
-                self.send_json(pt_site_test(sid, data.get('q') or ''))
+                self.send_json(pt_site_test(sid, data.get('q') or '', bool(data.get('auto_outlet'))))
             except Exception as e:
                 self.send_json({'error': '测试失败: %s' % e}, code=500)
 
