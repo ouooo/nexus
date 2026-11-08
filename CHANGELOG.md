@@ -2,6 +2,15 @@
 
 ## 2.2.9 — 2026-11-07
 
+### 镜像发布上线：ghcr.io/ouooo/nexus（Actions 云端构建）
+- 出口结论：NAS 与 Windows 都到不了 `registry-1.docker.io`（TLS 被掐），Docker Hub 这条路走不通；ghcr 反而直连可用（NAS 实测 `GET /v2/` 401、0.6s）。
+- 凭据结论：现有 `GH_TOKEN` 是 GitHub CLI 的 `gho_…`，`x-oauth-scopes: repo`——只有 repo。ghcr 的 `POST /v2/ouooo/nexus/blobs/uploads/` 实测 `403 permission_denied`（能读不能写）；且带 workflow 文件的提交被 GitHub 拒绝（`without 'workflow' scope`）。**两条路都堵在这个 token 上**。
+- 落地：改走 GitHub Actions，用仓库自带的 `GITHUB_TOKEN` + `permissions: packages: write`，不依赖 NAS 出口、不需要 PAT。`.github/workflows/docker-publish.yml`：`workflow_dispatch`（可选 tag 输入）+ `push: tags: v*`；`docker/login-action` 登录 ghcr；`build-push-action` 打 `:<version>` + `:latest`、gha 缓存、写入 `GIT_REVISION`/`BUILD_DATE` 与 source/revision label。
+- 首跑：run `42446858637`，9 个步骤全绿，`conclusion=success`。
+- 验收（真拉真起）：NAS `docker pull ghcr.io/ouooo/nexus:2.2.9` 成功（Digest `sha256:4333c1fe…`，本地镜像 `df8a035e6fe7`，51.2MB）；新建**空数据目录**起容器，首次启动即 `healthy`、`restarts=0`、`GET / → 200`、`/api/config → 401`（首装生成随机初始口令、默认开认证，属预期）。
+- 一致性命中：镜像内 `api.py` / `dashboard.html` / `search_engine.py` 三个 sha256 与线上 hc14 容器**逐字节一致**。
+- 顺手修掉一个会让云端构建必失败的坑：`.dockerignore` 白名单漏了 `search_engine.py`（`COPY search_engine.py` 会 `not found`），已补 `!search_engine.py`（commit `8402d0c`）。
+
 ### 站名清洗静默失效的根因（hc14）
 - 症状：hc13 里 `_site_display_name` 明明存在、调用点也在，插件推上来的标签页标题却照样入库（8 条 `BTSCHOOL :: 查看主题 …`）。
 - 根因：`api.py` 只 `import urllib.parse`，没导入 `urlsplit`；`_site_display_name` 里 `urlsplit(...)` 抛 `NameError` 被自己的 `except` 吞掉 → `host` 恒为空 → `bad` 分支只能退回原串，等于**永远不清洗**。这也解释了为什么「清洗脚本跑完 0 残留、过一会又变回标题」。
