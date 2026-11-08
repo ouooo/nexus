@@ -1152,9 +1152,17 @@ def _build_request(site, query, proxy_url='', path=None):
     else:
         form = dict(params)
         body = search.get('body') or {}
-        form.update({k: str(v).replace('{keyword}', query) for k, v in body.items()})
+        # body 里的数值（pageNumber/pageSize）要保住类型：JSON 接口不认 "1" 当成字符串还是数字
+        # 有时很敏感，这里只对字符串做 {keyword} 替换，非字符串原样带过去。
+        for k, v in body.items():
+            form[k] = v.replace('{keyword}', query) if isinstance(v, str) else v
         ct = search.get('contentType') or 'application/x-www-form-urlencoded'
-        data = urllib.parse.urlencode(form, doseq=True).encode('utf-8')
+        if 'json' in str(ct).lower():
+            # 私有 JSON API（馒头 POST /api/torrent/search）：body 必须是 JSON 对象。
+            # 旧实现一律 urlencode，即便声明了 application/json 也发成 k=v&k=v，服务端解析不到。
+            data = json.dumps(form, ensure_ascii=False).encode('utf-8')
+        else:
+            data = urllib.parse.urlencode(form, doseq=True).encode('utf-8')
         extra['Content-Type'] = ct
 
     headers = {

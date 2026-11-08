@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.2.10 私有 JSON 搜索接口 + 健康检查自适应 + 插件入仓 — 2026-11-08
+
+### 症状 / 需求
+- **馒头（M-Team）这类私有 JSON API 站搜不出结果**：站点定义里已经写了 `method: POST`、`contentType: application/json`、`body: {pageNumber:1,pageSize:100}`，但服务端 `_build_request()` 不管 `contentType` 一律 `urlencode`，实际发出的是 `k=v&k=v`，对端解析不到 JSON 就返回空。
+- **容器一开原生 TLS，健康检查就永远失败**：镜像里 `HEALTHCHECK` 写死探 `http://127.0.0.1:28080/`，于是容器显示 `unhealthy` 而服务其实正常，每次 pull 重建都得手工补一句 `--health-cmd` 才能绕过。
+- **浏览器插件只有散落的裸文件，没有进任何仓库**。
+
+### 改法
+- `search_engine.py::_build_request()`：`contentType` 含 `json` 时改用 `json.dumps(..., ensure_ascii=False)`；`body` 里非字符串值（`pageNumber`/`pageSize`）原样保留类型，只对字符串做 `{keyword}` 替换。旧实现的 GET、表单 POST 路径一字不动。
+- `Dockerfile`：`HEALTHCHECK` 按 `DASH_TLS_CERT` 是否存在自动选 `https` / `http`（https 用不校验证书的 context，避免内网/自签场景误报）；`LABEL version` 升到 `2.2.10`。
+- 新增 `extension/`：浏览器插件 1.2.10 入仓（站点定义小表 `SITE_DEFS` + 不覆盖已有配置 + 出厂不带任何具体地址）；`.gitignore` 为 `extension/**/*.png` 开例外，其余 `*.png` 仍然不入库。
+
+### 验收
+- `_verify_build_request.py` 13/13 ALL PASS：馒头 URL、`POST`、`Content-Type: application/json`、body 内 `keyword` 命中、`pageNumber` 仍为数字、回退候选路径；NexusPHP GET 与表单 POST 回归不变。
+- `_verify_sitedefs.mjs` 23 项 ALL PASS（表命中 / 相似域名不误命中 / 深拷贝隔离 / 空 cookie 不带字段 / 旧默认升级 / 手调定义不动 / 重测不带定义）。
+- 真实 Chromium 加载插件：`_verify_ext_popup.py` **0 FAIL**（缓存重开、实时跑码、日志区固定高度）。
+
+### 已知遗留
+- 插件默认地址已改为空（首次必须自己填），协议填反了会双向自愈（https ↔ http）。
+- 原生 HTTPS 实例要用**域名**访问：证书 SAN 只覆盖域名，用 IP 会 `certificate verify failed: IP address mismatch`。
+
 ## 2.2.9 搜索筛选条：从结果集动态提取标签 chip（hc19）— 2026-11-08
 
 ### 症状 / 需求
