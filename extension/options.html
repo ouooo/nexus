@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NEXUS 站点管家 · 设置</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 28px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 20px; }
+  .field + .field { margin-top: 14px; }
+  .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .actions .nx-btn.primary { flex: 1; }
+  .list { margin-top: 14px; font-size: 12px; color: var(--c-text-mid); }
+  .list div { padding: 6px 0; border-bottom: 1px dashed var(--border-lo); }
+  .list div:last-child { border-bottom: 0; }
+  .gate-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .gate-row label { display: flex; align-items: center; gap: 7px; color: var(--c-text); cursor: pointer; min-width: 0; }
+  .gate-row label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gate-row .gate-tags { display: flex; gap: 6px; flex: none; align-items: center; }
+  .gate-row .gate-why { font-size: 11px; color: var(--c-text-low); white-space: nowrap; }
+  .gate-row .gate-why.off { color: #B26B00; }
+  .gate-row .gate-host { color: var(--c-text-low); font-size: 11px; flex: none; }
+  .gate-row input[type=checkbox] { width: 14px; height: 14px; flex: none; accent-color: #009E9E; }
+</style>
+</head>
+<body>
+  <h1>设置</h1>
+  <div class="hint" style="margin-top:4px">NEXUS 地址填你自己的实例（例如 <code>https://nexus.example.com</code>）；账号密码只存在本机扩展存储里，用于换取 NEXUS 会话令牌，不会上传到别处。插件是私有分发（加载已解压扩展），不上商店。</div>
+
+  <div class="nx-card">
+    <div class="field"><label>NEXUS 地址</label><input class="nx-input" id="nexusUrl" placeholder="https://nexus.example.com"></div>
+    <div class="field"><label>账号</label><input class="nx-input" id="username" placeholder="admin"></div>
+    <div class="field"><label>密码</label><input class="nx-input" id="password" type="password" placeholder="••••••"></div>
+    <div class="field"><label>自动保活间隔（分钟，0 = 关闭）</label><input class="nx-input" id="autoMin" type="number" min="0" step="5" value="30"></div>
+    <div class="actions">
+      <button class="nx-btn primary" id="save">保存并登录</button>
+      <button class="nx-btn" id="testConn">测试连接</button>
+    </div>
+    <div id="msg" class="nx-msg info" hidden><span class="dot"></span><span class="txt"></span></div>
+  </div>
+
+  <div class="nx-card">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <label>同步门禁</label>
+      <span class="nx-chip" id="gateStat">读取中…</span>
+    </div>
+    <div class="hint" style="margin-top:4px">勾上 = 扫描时读这个站的 cookie、实测并推送 NEXUS；不勾 = 直接跳过，连 cookie 都不读。默认值来自初筛：<b>NEXUS 库里已有 / 探针确认是 PT</b> 默认勾，<b>不像 PT 站 / 豆瓣</b> 默认不勾。最终以你的选择为准，改过的项会记住。</div>
+    <div class="actions" style="flex-direction:row">
+      <button class="nx-btn" id="gateAllOn">全选</button>
+      <button class="nx-btn" id="gateAllOff">全不选</button>
+      <button class="nx-btn" id="gateDefault">按初筛恢复</button>
+    </div>
+    <div class="list" id="gateList" style="max-height:260px;overflow:auto"></div>
+  </div>
+
+  <div class="nx-card">
+    <label>上次扫描回执</label>
+    <div class="list" id="lastScan"></div>
+  </div>
+
+  <div class="nx-card">
+    <label>已登记的站点（本地）</label>
+    <div class="list" id="siteList"></div>
+  </div>
+
+<script src="options.js"></script>
+</body>
+</html>

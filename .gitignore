@@ -13,6 +13,9 @@ preview_*
 *.png
 *.jpg
 *.jpeg
+# 插件图标必须入库（上面按扩展名忽略了图片）
+!extension/
+!extension/**/*.png
 _deploy_recreate.sh
 
 _privacy_scan.py

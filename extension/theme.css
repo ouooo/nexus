@@ -1,0 +1,128 @@
+/* NEXUS 站点管家 —— 与 dashboard.html 共用同一套设计令牌
+   令牌取值与 nexus/dashboard.html 的 :root 保持一致，改令牌时两处一起改。
+   这里只定义变量与最小组件类，不引入新颜色。 */
+
+:root {
+  --c-accent: #0A84FF; --c-accent2: #5E5CE6; --c-danger: #FF3B30; --c-warning: #FF9F0A;
+  --c-success: #30D158; --c-fav: #FFD60A;
+  --c-text-hi: #FFFFFF; --c-text-mid: rgba(255, 255, 255, 0.8); --c-text-low: rgba(255, 255, 255, 0.55);
+  --glass-faint: rgba(255, 255, 255, 0.06);
+  --glass-hover: rgba(255, 255, 255, 0.1);
+  --glass-strong: linear-gradient(145deg, rgba(255,255,255,0.17) 0%, rgba(255,255,255,0.10) 45%, rgba(255,255,255,0.06) 100%);
+  --glass-mid: linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.04) 100%);
+  --blur-lg: blur(24px) saturate(1.5);
+  --border-hi: rgba(255, 255, 255, 0.16);
+  --border-lo: rgba(255, 255, 255, 0.08);
+  --radius-xl: 18px; --radius-lg: 14px; --radius-md: 12px; --radius-xs: 10px; --radius-sm: 8px;
+  --field-bg: rgba(0, 0, 0, 0.25);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --bg-app: #1c1c1e;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-app);
+  color: var(--c-text-hi);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+}
+
+h1 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+
+.sub { color: var(--c-text-low); font-size: 11px; margin-top: 2px; }
+.hint { color: var(--c-text-low); font-size: 12px; line-height: 1.6; }
+.hint-ic { color: var(--c-text-low); font-size: 11px; }
+
+.nx-card {
+  background: var(--glass-mid);
+  border: 1px solid var(--border-lo);
+  border-radius: var(--radius-md);
+  padding: 11px 12px;
+  margin-top: 11px;
+  backdrop-filter: var(--blur-lg);
+  -webkit-backdrop-filter: var(--blur-lg);
+}
+
+.row { display: flex; align-items: center; gap: 8px; }
+.row + .row { margin-top: 8px; }
+.kv { color: var(--c-text-low); font-size: 11px; min-width: 52px; flex: 0 0 auto; }
+.val {
+  color: var(--c-text-mid); font-size: 12px; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 按钮：与 dashboard 的 .pt-btn / .btn-primary 同语言
+   交互态齐全：hover / active 按下 / focus-visible 键盘焦点 / disabled / loading */
+.nx-btn {
+  font: inherit; border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+  padding: 9px 12px; cursor: pointer; transition: background .15s, transform .12s, opacity .15s;
+  background: var(--glass-hover); color: var(--c-text-hi);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  position: relative;
+}
+.nx-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.nx-btn:active { transform: scale(.975); }
+.nx-btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.nx-btn.primary { background: #fff; color: #0a0a0c; border-color: transparent; font-weight: 600; }
+.nx-btn.primary:hover { background: #f2f2f5; }
+.nx-btn.primary:focus-visible { outline-color: var(--c-accent); }
+.nx-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+/* 载入中：保留宽度（不跳版），左侧转圈，文案由 JS 换成「登录中…」 */
+.nx-btn.loading { cursor: progress; pointer-events: none; }
+.nx-btn.loading::before {
+  content: ""; width: 12px; height: 12px; flex: none; border-radius: 50%;
+  border: 1.5px solid currentColor; border-top-color: transparent;
+  animation: nx-spin .7s linear infinite; opacity: .8;
+}
+@keyframes nx-spin { to { transform: rotate(360deg); } }
+
+/* 状态提示：一句话 + 圆点，出现时轻微上移淡入；成功/失败只换颜色，不换版式 */
+.nx-msg {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: 10px; font-size: 12px; line-height: 1.55; color: var(--c-text-mid);
+  animation: nx-in .18s ease-out;
+}
+.nx-msg[hidden] { display: none; }
+.nx-msg .dot { margin-top: 4px; }
+.nx-msg.ok { color: var(--c-text-mid); }
+.nx-msg.ok .dot { background: var(--c-success); }
+.nx-msg.bad .dot { background: var(--c-danger); }
+.nx-msg.info .dot { background: var(--c-accent); }
+.nx-msg.busy .dot { background: var(--c-accent); animation: nx-pulse 1s ease-in-out infinite; }
+@keyframes nx-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@keyframes nx-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* 状态点：与 dashboard 的 .pt-dot 同色 */
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--c-text-low); }
+.dot.ok { background: var(--c-success); }
+.dot.warn { background: var(--c-fav); }
+.dot.cool { background: var(--c-warning); }
+.dot.bad { background: var(--c-danger); }
+
+/* 输入框：与 dashboard 的 __field-bg + 边框语言一致 */
+.nx-input {
+  width: 100%; background: var(--field-bg); border: 1px solid var(--border-hi);
+  border-radius: var(--radius-sm); color: var(--c-text-hi);
+  padding: 10px 12px; font: inherit; outline: none;
+}
+.nx-input:focus { border-color: var(--c-accent); }
+label { display: block; color: var(--c-text-mid); font-size: 12px; margin-bottom: 6px; }
+
+/* 日志：等宽字体，长 URL / 诊断码更好读 */
+.nx-log {
+  font: 11px/1.5 var(--font-mono); color: var(--c-text-low);
+  white-space: pre-wrap; max-height: 108px; overflow: auto;
+  margin-top: 10px; padding: 8px 10px;
+  background: var(--glass-faint); border: 1px solid var(--border-lo);
+  border-radius: var(--radius-sm);
+}
+
+.nx-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: var(--radius-xs);
+  background: var(--glass-faint); color: var(--c-text-mid); font-size: 11px;
+}
+
+a { color: var(--c-accent); font-size: 11px; text-decoration: none; }
+a:hover { text-decoration: underline; }

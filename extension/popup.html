@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXUS 站点管家</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { width: 360px; padding: 14px; }
+  .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 11px; }
+  .foot { margin-top: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .foot .nx-chip { color: var(--c-text-low); }
+  /* 扫描记录：固定高度内部滚动（跑码变长不撑高弹窗），行与行之间不叠字 */
+  .log-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 11px; }
+  .log-head .t { font-size: 11px; color: var(--c-text-low); }
+  .nx-log { max-height: 168px; }
+  .nx-log .lg { padding: 1px 0; }
+</style>
+</head>
+<body>
+  <div class="row" style="justify-content:space-between">
+    <div>
+      <h1>NEXUS 站点管家</h1>
+      <div class="sub">一键导入 · 登录态保活 · 现场诊断</div>
+    </div>
+    <span id="nexusDot" class="dot" title="NEXUS 连接状态"></span>
+  </div>
+
+  <div class="nx-card">
+    <div class="row"><span class="kv">当前站点</span><span class="val" id="curSite">读取中…</span></div>
+    <div class="row"><span class="kv">NEXUS</span><span class="val" id="curNexus">—</span></div>
+  </div>
+
+  <div class="nx-msg" id="banner" hidden><span class="dot"></span><span class="txt"></span></div>
+
+  <div class="actions">
+    <button class="nx-btn primary" id="btnAdd">导入当前站点并推送</button>
+    <button class="nx-btn" id="btnScan">扫描已打开的站点并同步</button>
+    <button class="nx-btn" id="btnProbe">全部重测（本地）</button>
+    <button class="nx-btn" id="btnKeep">立即保活一次</button>
+    <button class="nx-btn" id="btnSync">查看 NEXUS 站点健康度</button>
+  </div>
+
+  <div class="log-head"><span class="t">扫描记录</span><span class="t" id="logMeta">尚未扫描</span></div>
+  <div id="log" class="nx-log">准备就绪</div>
+
+  <div class="foot">
+    <span class="nx-chip" id="tipChip">停用站点只影响 NEXUS 搜索</span>
+    <a href="options.html" target="_blank">设置 ›</a>
+  </div>
+
+<script src="popup.js"></script>
+</body>
+</html>
