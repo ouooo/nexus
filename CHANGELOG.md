@@ -1,5 +1,69 @@
 # Changelog
 
+## 2.2.9 搜索筛选条：从结果集动态提取标签 chip（hc19）— 2026-11-08
+
+### 症状 / 需求
+- `#dynamicFilterRow.search-filter-chips` 只有静态条件（PT 是 做种≥100 / 4K / 1080p / BluRay；网盘是 有/无提取码；在线是 低端影视 / 域名直连），结果里明明带着归类信息却要用户自己翻。
+- 口径（用户原话「就这么做」，并强调「注意不是要你瞎取啊」）：**只取结果里本来就有的稳定字段**，不解析标题猜 HDR / 国语这种。
+  - PT → `category`（站内栏目：电影 / 剧集 / 纪录片…）
+  - 网盘 → `type` 经 `PAN_TYPE` 映射成中文网盘名（阿里云盘 / 夸克网盘 / 磁力…）
+  - 在线 → `source`（低端影视 / 域名直连）
+
+### 改法（`dashboard.html`，紧跟 `_flipLabelOf` 的三个函数 + 四处接线 + 浮层）
+- 三个函数：
+  - `_tagValueOf(r, source)`：按来源取字段。网盘那条**内置兜底映射表**（`window._PAN_TYPE` 缺失时自建 aliyun→阿里云盘 等 15 项）——主搜索页的 `PAN_TYPE` 是 `renderGenericResults` 的局部 const，不写 window，不兜底就会显示英文 key `aliyun`（验首轮就栽在这）。
+  - `collectResultTags(results, source, minCount=2)`：计数 → 只留出现 ≥2 次 → 次数降序 + 同次数按 `localeCompare(...,'zh-Hans-CN')` 升序。
+  - `renderResultTagChips(source, results)`：清掉上一轮 `[data-tag]` → 与静态 chip 同名去重（在线 `source`=「低端影视」与静态条件同名，不去重会重复一行）→ 上次选中的标签在新结果集里消失则自动清空 `window._tagFilter`。
+- 接线：
+  - `setupFilterBar(source)` 末尾重置 `window._tagFilter = ''`（标签属于上一轮结果集，新搜索必须清）；
+  - `applySearchFilterSort(results, source, filter, sort, sortDir, tag)` 加第 6 参，先按 `String(_tagValueOf(r, source)) === String(tag)` 精确过滤，再走原有静态筛选与排序；
+  - `renderGenericResults()` 开头渲染标签 chip，并把 `_tagFilter` 传给筛选；
+  - 通用点击监听新增 `data-tag` 分支（toggle 高亮 / 赋值 / `updateFilterBadge()`）；静态 `data-filter === 'all'` 时把标签维度一并清掉；徽标计数改为「静态 1 + 标签 1」。
+- 浮层（`#flipSearchBody` 里的工具栏）：
+  - `_flipState` 增 `tag:''`；`window.flipPickTag(el)`（再点取消）；`flipPickFilter` 在 `filter==='all'` 时清 `st.tag` **并把 `#flipTagChips` 高亮切回「全部」**（第一版只清数据没同步高亮，验收 FAIL 后补的）；`renderFlipResults` 把 `st.tag` 传给筛选、底部「已筛选」条件也算上它。
+  - 新增「标签」行，仅 `tagItems.length > 1 && source !== 'pansou' && source !== 'online'` 时出现：浮层的「站点」行对网盘就是网盘类型中文名，再给一行标签是同一维度重复；在线只有 `source` 一维且与静态同名。
+- 视觉：动态 chip 加 `.pt-tag-chip`（`gap:5px`）+ 计数 `.tag-n`（opacity .5 / 11px），与静态 chip 同款但计数弱化；不带空格拼接后计数不再被挤在一起。
+
+### 验收（生产 hc19，两套脚本，合计 FAIL 0）
+- `_verify_tagchips.py`（主搜索页，15 项 OK）：PT 注入 13 条 → 标签 `电影6 / 剧集4 / 纪录片2`（空 `category` 与仅 1 次的「纪录片」边界样本按规则不生成第三条以外的项）；点「电影」→6 条 + 高亮 + 徽标 1；再点静态 4K → 3 条 + 徽标 2；点「全部」→13 条且标签清空、徽标 0；点「剧集」→4 条；再点一次→13 条。网盘 9 条 → `阿里云盘5 / 夸克网盘3`（只有 1 条的「百度网盘」不出现），点「阿里云盘」→5 条。在线 6 条 → 因与静态条件同名而不重复生成标签行。
+- `_verify_flip_tag.py`（浮层，`pg.route('**/search/pt*')` 喂 12 条 JSON 走真实 `flipSearch` → `flipSearchGo('pt')`，6 项 OK）：标签行 `全部 / 电影6 / 剧集4 / 纪录片2`、12 条；点「电影」→6 条 + 高亮；点静态「全部」→12 条且标签回「全部」。
+- 截图：`_preview/v229v_tags_pt.png`、`v229v_tags_pt_filtered.png`、`v229v_tags_pansou.png`、`v229v_flip_tags.png`。
+- 现场限制：PT 站点大面积 cookie 失效（本轮 38 站用了 17 站，PTSKit / 吐鲁番 登录态失效、UBits challenge、audiences.me 被挡、Rousi pending），`/api/search/pt` 真实返回 0 条；网盘 / 在线也几乎空。所以标签聚合的真实样本只能靠注入与网络拦截构造，**等 cookie 恢复后才有真实标签可点**。
+
+### 上线
+- `nexus:2.2.9-hc19` = `808c7a549597`（源 `nexus:2.2.9-build22` 同 ID），容器 `nexus-test` = `8b6a388409a3`，`28081→28080`，`healthy`，17 挂载 / 15 个 `DASH_*` 与原样一致；备份目录 `_backup_20261108_229v`。
+- 本轮共 5 次构建（每次 `--dry-run` 先行 + 停旧容器改名回滚点），最终回滚点保留 `nexus-test-pre-229v-1794119846`（hc18 / `577b659fd490` / 容器 `48d60d512937`）；中间 4 个临时回滚点与对应悬空镜像已删。
+- `dashboard.html` 现值 sha256 `3f384ebfd0db487d…`（NAS `/tmp/nexus-build/dashboard.html` 与容器内 `/app/dashboard.html` 逐字节一致）。
+- 未做：本轮改动**未 commit / 未 push**，ghcr `2.2.9`/`latest` 仍是 hc14 时期源码。
+
+## 2.2.9 详情页右侧评分卡低屏适配（hc17 → hc18）— 2026-11-08
+
+### 影视详情页右侧评分/元信息卡：高度固定 + 卡内滚动 + 底部 24px 间距
+- 症状：右侧卡高度随 `metaRows` 行数增长（同片 15 行时实测恒 600px），1440x900 时底部越出屏幕 13px、1280x700 越界 213px、1024x640 越界 273px，低屏看不到「文件路径」等末尾字段。
+- 改法（与左侧简介滚动区同口径）：
+  - 右列容器 `.detail-side` 加 `min-height:0; overflow:hidden;`（高度由内容区 flex 撑满）；
+  - 卡加 `class="detail-side-card"` → CSS `height:100%; box-sizing:border-box; overflow-y:auto; overscroll-behavior:contain;`（超出在卡内滚）；
+  - 内容区 flex 的父级本就 `min-height:0`，所以卡高 = 内容区高 − 上下内边距，卡底始终距屏幕底 24px（容器 `padding:16px 24px 24px 0`）。
+- hc18 追加：滚动容器底部 `padding` 在滚到底时会被裁掉 15px，末尾 `::after` 补 12px 占位（卡内 padding 改 `16px 20px 12px`），保证滚到底最后一行完整可见。
+- 验收（生产 hc18，`_verify_229t_detailcard.py`，三视口 1440x900 / 1280x700 / 1024x640，FAIL 0）：
+  - 卡底不越屏 ✔；底间距恒为 24px ✔；卡高 = 左侧滚动区高 − 40（16+24）✔；
+  - 低屏 `scrollH 606 > clientH 291/231` 可内滚 ✔；滚到底最后一行（单集时长）完整可见 ✔。
+  - 改前基线对照：同一脚本在 hc16 上 FAIL 13 项（底间距 −13 / −213 / −273px，卡高恒 600px）。
+- 上线：`hc17` = `nexus:2.2.9-hc17`/`adefbf856b98`（容器 `6f3d8f73a519`，备份 `_backup_20261108_229t`）→ `hc18` = `nexus:2.2.9-hc18`/`577b659fd490`（容器 `48d60d512937`，备份 `_backup_20261108_229u`）。
+- `dashboard.html` 现值 1018107 B / sha16 `903783cbc9eced86`；NAS `/tmp/nexus-build/` 已同步（旧档留 `dashboard.html.bak.hc16`）。
+- 未做：本轮改动**未 commit / 未 push**，ghcr `2.2.9`/`latest` 仍是 hc14 时期源码。
+
+## 2.2.9 站点排序三档（hc15 → hc16）— 2026-11-08
+
+### 站点搜索「排序」chip 增加第三档「正常优先」
+- 原只有两档：`异常优先`（rank ok=3/off=2/warn=1/cool=0 升序，正常站垫底）与 `按名称排序`。
+- 新增 `正常优先`（`fast`）：正常站（`state=ok`）全部排前，组内按后端 `health_snapshot()` 的 `last_ms`（上次实测延迟）升序；没有延迟记录的站排在正常组末尾，再按名称；非正常站之间按名称。
+- `toggleSiteSort()` 改三档循环 `risk → name → fast → risk`；chip 文案走 `SORT_LABEL = {risk:'异常优先', name:'按名称排序', fast:'正常优先'}`。
+- hc16 追加：`fast` 档下每行尾巴显示 `上次 N ms`（`_siteSub` 内按 `window._ptSortBy === 'fast' && s.state === 'ok'` 加），排序依据肉眼可核对；其余两档文案不变。
+- 验收（生产 hc16，实跑）：`异常优先` 正常站全在末尾 ✔；`按名称排序` 名称严格升序（用页面自身 localeCompare 判）✔；`正常优先` 正常组 15 站全在前、延迟序列 `303 → 544 → 645 → 723 → 804 → 946 → 1345 → 1453 → 1822 → 2627 → 2764 → 3140 …` 非降、无延迟的排组末 ✔；三次点击循环回 `异常优先` ✔；FAIL 0。
+- 上线：`hc15` = `nexus:2.2.9-hc15`/`faad0c48bb77`（容器 `ace9497b48fd`）→ `hc16` = `nexus:2.2.9-hc16`/`fcee45ecc203`（容器 `194cdc74317b`），回滚点 `nexus-test-pre-229r` / `-pre-229s`。
+- 注意：这两轮的 `dashboard.html`（1017330 B，sha16 `b362617fcb56a8ec`）**尚未 commit / push**，ghcr 上的 `2.2.9`/`latest` 仍是旧 dashboard。
+
 ## 2.2.9 — 2026-11-07
 
 ### 镜像发布上线：ghcr.io/ouooo/nexus（Actions 云端构建）

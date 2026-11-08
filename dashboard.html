@@ -1205,6 +1205,10 @@
   }
   .pt-filter-chip:hover { background:rgba(255,255,255,0.12); }
   .pt-filter-chip.active:hover { background:rgba(255,255,255,0.2); border-color:rgba(255,255,255,0.2); color:#fff; }
+  /* 结果标签 chip：名称与计数之间留一点气口，计数弱化（不抢条件本身的视觉权重） */
+  .pt-filter-chip.pt-tag-chip { gap:5px; }
+  .pt-tag-chip .tag-n { opacity:0.5; font-size:11px; line-height:1; }
+  .pt-filter-chip.active .tag-n { opacity:0.75; }
   .pt-filter-label { font-size:11px; color:rgba(255,255,255,0.4); margin-right:4px; }
 
   /* 统一来源标签（结果卡片右下角） */
@@ -1911,6 +1915,13 @@
     .detail-actions button { width: auto !important; }
     }
   @media (min-width: 900px) { .detail-side { display:block !important; } .detail-side-mobile { display:none !important; } }
+  /* 详情页右侧评分/元信息卡：高度跟内容区一致（不随信息条数变高），超出在卡内滚动，底部留 24px 与屏幕底间距 */
+  .detail-side-card { height:100%; box-sizing:border-box; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  /* 滚动容器底部 padding 在部分内核滚到底时会被裁掉，用尾部占位补足卡内底部留白 */
+  .detail-side-card::after { content:''; display:block; height:12px; }
+  .detail-side-card::-webkit-scrollbar { width:6px; }
+  .detail-side-card::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.18); border-radius:3px; }
+  .detail-side-card::-webkit-scrollbar-track { background:transparent; }
     .transfer-table {
       font-size: 12px;
     }
@@ -5869,6 +5880,58 @@ function _flipLabelOf(r, source) {
   }
   return r.site || r.source || '';
 }
+// ===== 结果标签 chips（2.2.9）=====
+// 只取结果里本来就有的稳定字段，不解读标题关键词：
+//   PT → category（站内栏目：电影/剧集/纪录片…）
+//   网盘 → type（映射成中文网盘名，与结果徽标同一套 PAN_TYPE）
+//   在线 → source（低端影视 / 域名直连…）
+// 聚合规则：按出现次数降序，只保留出现 ≥2 次的标签，chip 显示「标签 (n)」。
+function _tagValueOf(r, source) {
+  if (!r) return '';
+  if (source === 'pansou') {
+    // 网盘类型 → 中文名（与结果徽标同一套；浮层里会写 window._PAN_TYPE，主搜索页用它兜底）
+    const m = window._PAN_TYPE || (window._PAN_TYPE = {
+      aliyun:'阿里云盘', baidu:'百度网盘', quark:'夸克网盘', xunlei:'迅雷网盘',
+      '123':'123云盘', tianyi:'天翼云盘', guangya:'光鸭网盘', mobile:'移动云盘',
+      uc:'UC网盘', magnet:'磁力', other:'其他', others:'其他',
+    });
+    return m[r.type] || r.type || '';
+  }
+  if (source === 'online') return r.source || '';
+  return r.category || '';
+}
+function collectResultTags(results, source, minCount) {
+  const counts = {};
+  (results || []).forEach(function (r) {
+    const v = _tagValueOf(r, source);
+    if (v) counts[v] = (counts[v] || 0) + 1;
+  });
+  const min = minCount || 2;
+  return Object.keys(counts)
+    .filter(function (k) { return counts[k] >= min; })
+    .sort(function (a, b) { return counts[b] - counts[a] || String(a).localeCompare(String(b), 'zh-Hans-CN'); })
+    .map(function (k) { return [k, counts[k]]; });
+}
+function renderResultTagChips(source, results) {
+  const row = document.getElementById('dynamicFilterRow');
+  if (!row) return;
+  row.querySelectorAll('[data-tag]').forEach(function (c) { c.remove(); });
+  const tags = collectResultTags(results || window._searchResults || [], source || window._searchSource, 2);
+  // 与静态 chip 同名的标签不重复展示（如在线结果的 source 就叫「低端影视」，静态条件里已有）
+  const staticNames = Array.from(row.querySelectorAll('[data-filter]')).map(function (c) { return (c.textContent || '').trim(); });
+  const kept = tags.filter(function (t) { return staticNames.indexOf(t[0]) < 0; });
+  // 上一轮选中的标签在新结果集里没有了 → 自动失效，避免出现「筛出 0 条还以为坏了」
+  if (window._tagFilter && !kept.some(function (t) { return t[0] === window._tagFilter; })) {
+    window._tagFilter = '';
+  }
+  if (!kept.length) return;
+  const cur = window._tagFilter || '';
+  row.insertAdjacentHTML('beforeend', kept.map(function (t) {
+    return '<div class="pt-filter-chip pt-tag-chip' + (cur === t[0] ? ' active' : '') + '" data-tag="' + esc(t[0])
+      + '" title="按结果标签筛选：' + esc(t[0]) + '（' + t[1] + ' 条）">'
+      + esc(t[0]) + '<span class="tag-n">' + t[1] + '</span></div>';
+  }).join(''));
+}
 function _flipSortChipText(c, active, dir) {
   const base = c.dataset.base || '';
   if (base === '默认') return base;
@@ -5879,12 +5942,28 @@ window.flipPickFilter = function (el) {
   if (el.dataset.f != null) {
     st.filter = el.dataset.f;
     document.querySelectorAll('#flipFilterChips .fs-chip').forEach(c => c.classList.toggle('on', c.dataset.f === st.filter));
+    if (st.filter === 'all') {   // 「全部」把标签条件一起清掉，标签 chip 高亮同步回「全部」
+      st.tag = '';
+      document.querySelectorAll('#flipTagChips .fs-chip').forEach(c => {
+        c.classList.toggle('on', (c.dataset.tag || '') === '');
+      });
+    }
   } else if (el.dataset.site != null) {
     st.site = el.dataset.site === '__all' ? '' : el.dataset.site;
     document.querySelectorAll('#flipSiteChips .fs-chip').forEach(c => {
       c.classList.toggle('on', (c.dataset.site === '__all' ? '' : c.dataset.site) === st.site);
     });
   }
+  renderFlipResults();
+};
+// 浮层「标签」chip：点已选中的再点一次 = 取消
+window.flipPickTag = function (el) {
+  const st = window._flipState; if (!st || !el) return;
+  const v = el.dataset.tag || '';
+  st.tag = (st.tag === v) ? '' : v;
+  document.querySelectorAll('#flipTagChips .fs-chip').forEach(c => {
+    c.classList.toggle('on', (c.dataset.tag || '') === (st.tag || ''));
+  });
   renderFlipResults();
 };
 window.flipSortBy = function (el) {
@@ -5908,7 +5987,7 @@ window.renderFlipResults = function () {
   const list = document.getElementById('flipResultList'); if (!list) return;
   const source = st.source;
   const LABELS = { pansou: '网盘搜索', online: '在线观影', pt: '站点搜索' };
-  let rows = applySearchFilterSort(st.results, source, st.filter, st.sort, st.dir);
+  let rows = applySearchFilterSort(st.results, source, st.filter, st.sort, st.dir, st.tag);
   if (st.site) rows = rows.filter(r => _flipLabelOf(r, source) === st.site);
 
   if (!rows.length) list.innerHTML = `<div class="flip-search-empty">当前筛选下没有结果，点「全部」恢复。</div>`;
@@ -5935,7 +6014,7 @@ window.renderFlipResults = function () {
     </div>`;
   }).join('') + `</div>`
     + `<div style="padding:12px 6px 4px;text-align:center;opacity:0.55;font-size:12px;">共 ${rows.length} 条结果`
-    + `${((st.filter && st.filter !== 'all') || st.site) ? `（已筛选，原始 ${st.results.length} 条）` : ''} · 点击条目在新标签页打开</div>`;
+    + `${((st.filter && st.filter !== 'all') || st.site || st.tag) ? `（已筛选，原始 ${st.results.length} 条）` : ''} · 点击条目在新标签页打开</div>`;
 };
 window.flipSearchGo = async function(source) {
   const body = document.getElementById('flipSearchBody');
@@ -5963,9 +6042,12 @@ window.flipSearchGo = async function(source) {
   };
   window._PAN_TYPE = PAN_TYPE;
   const cfg = SEARCH_FILTER_CONFIG[source] || SEARCH_FILTER_CONFIG.pansou;
-  window._flipState = { source: source, results: results, filter: 'all', sort: cfg.defaultSort, dir: 'desc', site: '' };
+  window._flipState = { source: source, results: results, filter: 'all', sort: cfg.defaultSort, dir: 'desc', site: '', tag: '' };
   const siteLabels = Array.from(new Set(results.map(r => _flipLabelOf(r, source))))
     .filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
+  // 标签行：只在「站点」行不是同一维度时才加（PT 的 category 是栏目，与站点是两个维度）
+  const tagItems = collectResultTags(results, source, 2);
+  const showTagRow = tagItems.length > 1 && source !== 'pansou' && source !== 'online';
   body.innerHTML =
     `<div class="flip-search-toolbar">
       <div class="fs-row"><span class="fs-label">排序</span><div class="fs-chips" id="flipSortChips">
@@ -5977,6 +6059,10 @@ window.flipSearchGo = async function(source) {
       ${siteLabels.length > 1 ? `<div class="fs-row"><span class="fs-label">站点</span><div class="fs-chips" id="flipSiteChips">
         <span class="fs-chip on" data-site="__all" onclick="flipPickFilter(this)">全部</span>
         ${siteLabels.map(l => `<span class="fs-chip" data-site="${esc(String(l))}" onclick="flipPickFilter(this)">${esc(String(l))}</span>`).join('')}
+      </div></div>` : ''}
+      ${showTagRow ? `<div class="fs-row"><span class="fs-label">标签</span><div class="fs-chips" id="flipTagChips">
+        <span class="fs-chip on" data-tag="" onclick="flipPickTag(this)">全部</span>
+        ${tagItems.map(t => `<span class="fs-chip" data-tag="${esc(t[0])}" onclick="flipPickTag(this)">${esc(t[0])} ${t[1]}</span>`).join('')}
       </div></div>` : ''}
     </div>` + `<div id="flipResultList"></div>`;
   renderFlipResults();
@@ -6508,6 +6594,7 @@ function setupFilterBar(source) {
   window._filter = 'all';
   window._sort = cfg.defaultSort;
   window._sortDir = 'desc';
+  window._tagFilter = '';   // 每次新搜索重置标签条件（标签来自上一轮结果集）
   // 重置为收起状态
   const _mtBar = document.getElementById('mediaTypeBar');
   if (_mtBar) { _mtBar.setAttribute('data-inuse', '0'); _mtBar.style.display = 'none'; }
@@ -6528,9 +6615,14 @@ function sizeBytes(s) {
   return parseFloat(m[1]) * (u[m[2]] || 1);
 }
 // 搜索结果通用的筛选 + 排序（主搜索页与翻转卡浮层共用这一份实现）
-function applySearchFilterSort(results, source, filter, sort, sortDir) {
+function applySearchFilterSort(results, source, filter, sort, sortDir, tag) {
   let list = [...(results || [])];
   const f = filter || 'all';
+  // 结果标签（PT category / 网盘类型 / 在线 source）：与静态条件叠加
+  if (tag) {
+    const want = String(tag);
+    list = list.filter(r => String(_tagValueOf(r, source)) === want);
+  }
   // 降序 = 1（b 大则排前），升序 = -1
   const dir = sortDir === 'asc' ? -1 : 1;
   if (source === 'pansou') {
@@ -6557,7 +6649,9 @@ function applySearchFilterSort(results, source, filter, sort, sortDir) {
 function renderGenericResults() {
   const results = window._searchResults || [];
   const source = window._searchSource;
-  let list = applySearchFilterSort(results, source, window._filter, window._sort, window._sortDir);
+  // 先按当前结果集重铺「标签」chips（PT category / 网盘类型 / 在线 source）
+  renderResultTagChips(source, results);
+  let list = applySearchFilterSort(results, source, window._filter, window._sort, window._sortDir, window._tagFilter);
   // 应用 include/exclude chips
   const incl = getChips('include');
   const excl = getChips('exclude');
@@ -7410,6 +7504,8 @@ function _siteSub(s) {
   parts.push(s.has_cookie ? '有 cookie' : '无 cookie');
   if (s.insecure) parts.push('跳过证书校验');
   if (s.proxy) parts.push('走代理');
+  // 「正常优先」档是按上次实测延迟排序的，这里把依据显示出来，用户能自己核对顺序
+  if (window._ptSortBy === 'fast' && s.last_ms && s.state === 'ok') parts.push('上次 ' + Number(s.last_ms) + 'ms');
   if (s.timeout && Math.abs(Number(s.timeout) - 3.5) > 0.01) parts.push(Number(s.timeout) + 's 超时');
   if (s.state === 'cool' && s.cooldown_until) {
     var left = Math.max(0, Math.round((s.cooldown_until - Date.now() / 1000) / 60));
@@ -7560,13 +7656,35 @@ function paintPtSites() {
       || String(s.base_url || '').toLowerCase().indexOf(kw) >= 0;
   });
   shown.sort(function(a, b) {
-    if (window._ptSortBy === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+    var byName = function() { return String(a.name || '').localeCompare(String(b.name || '')); };
+    if (window._ptSortBy === 'name') return byName();
+    if (window._ptSortBy === 'fast') {
+      // 正常站点优先；同为正常时按上次实测延迟升序（没测过的排在正常组末尾）
+      var ra = a.state === 'ok' ? 0 : 1, rb = b.state === 'ok' ? 0 : 1;
+      if (ra !== rb) return ra - rb;
+      if (ra === 0) {
+        var ma = Number(a.last_ms || 0), mb = Number(b.last_ms || 0);
+        if (!ma && !mb) return byName();
+        if (!ma) return 1;
+        if (!mb) return -1;
+        if (ma !== mb) return ma - mb;
+        return byName();
+      }
+      return byName();
+    }
     var rank = function(x) { return x.state === 'ok' ? 3 : x.state === 'off' ? 2 : x.state === 'warn' ? 1 : 0; };
     if (rank(a) !== rank(b)) return rank(a) - rank(b);
-    return String(a.name || '').localeCompare(String(b.name || ''));
+    return byName();
   });
   var sortChip = document.getElementById('ptSiteSort');
-  if (sortChip) sortChip.textContent = (window._ptSortBy === 'name') ? '按名称排序' : '异常优先';
+  if (sortChip) {
+    var SORT_LABEL = { risk: '异常优先', name: '按名称排序', fast: '正常优先' };
+    window._ptSortBy = window._ptSortBy || 'risk';
+    sortChip.textContent = SORT_LABEL[window._ptSortBy] || '异常优先';
+    sortChip.title = window._ptSortBy === 'fast'
+      ? '正常站点在前，同一组内按上次实测延迟从快到慢'
+      : '点一下切换排序方式（异常优先 / 按名称 / 正常优先）';
+  }
 
   var body = '';
   if (_ptEditing === '__new__') body += siteFormHtml(null);
@@ -7670,7 +7788,10 @@ async function testAllSites() {
 }
 
 function toggleSiteSort() {
-  window._ptSortBy = (window._ptSortBy === 'name') ? 'risk' : 'name';
+  // 三档循环：异常优先 → 按名称 → 正常优先（正常站按延迟），再点回到异常优先
+  var order = ['risk', 'name', 'fast'];
+  var cur = window._ptSortBy || 'risk';
+  window._ptSortBy = order[(order.indexOf(cur) + 1) % order.length];
   paintPtSites();
 }
 
@@ -7769,6 +7890,18 @@ document.addEventListener('click', e => {
     row.querySelectorAll('[data-filter]').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     window._filter = chip.dataset.filter;
+    // 点「全部」= 静态条件与标签条件一起清掉（标签 chip 只保留一个选中态）
+    if (chip.dataset.filter === 'all') {
+      window._tagFilter = '';
+      row.querySelectorAll('[data-tag]').forEach(c => c.classList.remove('active'));
+    }
+    updateFilterBadge();
+  }
+  if (chip.dataset.tag != null) {
+    const row = document.getElementById('dynamicFilterRow');
+    const v = chip.dataset.tag;
+    window._tagFilter = (window._tagFilter === v) ? '' : v;   // 再点一次 = 取消
+    row.querySelectorAll('[data-tag]').forEach(c => c.classList.toggle('active', c.dataset.tag === window._tagFilter));
     updateFilterBadge();
   }
   if (chip.dataset.sort) {
@@ -7793,7 +7926,7 @@ document.addEventListener('click', e => {
 });
 
 function updateFilterBadge() {
-  const count = (window._filter && window._filter !== 'all') ? 1 : 0;
+  const count = ((window._filter && window._filter !== 'all') ? 1 : 0) + (window._tagFilter ? 1 : 0);
   const badge = document.getElementById('filterActiveCount');
   if (count > 0) { badge.style.display = 'inline'; badge.textContent = count; }
   else { badge.style.display = 'none'; }
@@ -9931,8 +10064,8 @@ function openDetail(id) {
                 </div>
           </div>
           </div>
-          <div style="width:280px;flex-shrink:0;padding:16px 24px 24px 0;display:none;" class="detail-side">
-                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 20px;">
+          <div style="width:280px;flex-shrink:0;min-height:0;overflow:hidden;padding:16px 24px 24px 0;display:none;" class="detail-side">
+                <div class="detail-side-card" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 20px 12px;">
                   ${d.rating ? (function(){
                     // SVG 精确评分条：底层灰星，上层黄星按百分比裁剪
                     var pct = Math.max(0, Math.min(100, (parseFloat(d.rating) / 10) * 100));
