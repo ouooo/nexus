@@ -5336,6 +5336,39 @@ if __name__ == '__main__':
             _srv.socket = _ctx.wrap_socket(_srv.socket, server_side=True)
             _scheme = 'https'
             _log('INFO', 'system', '已启用原生 HTTPS（TLS1.2+） cert=%s' % _cert)
+            # ===== 证书热重载：让「挂目录」真正闭环，不依赖 acme hook，也不需要 docker restart =====
+            # 背景：acme 续期是「写临时文件 → rename」，rename 会换 inode；单文件 bind mount 会永远读旧
+            # 证书且不报错，所以必须挂目录（见 CHANGELOG 2.2.9）。但挂目录只解决「文件能看到新的」，
+            # SSLContext 是启动时建的，进程不重载就仍在用旧证书 —— 这台机器上表现为「续期成功但浏览器
+            # 还信任旧证书」，必须人工 restart。
+            # 做法：按 (inode, mtime, size) 三元组判断证书是否被换过，变了就 execv 重启自身进程
+            # （PID 不变，容器 --restart 策略与 docker 的状态都不受影响），重新 load_cert_chain。
+            # 这是通用能力：谁部署只要把证书目录挂进容器，续期后自动生效，不需要在部署方那里配钩子。
+            # 不想自动重启可设 DASH_TLS_HOT_RELOAD=0。
+            if os.environ.get('DASH_TLS_HOT_RELOAD', '1') != '0':
+                _hr_interval = max(5, int(os.environ.get('DASH_TLS_HOT_RELOAD_INTERVAL', '60') or 60))
+
+                def _cert_sig(p):
+                    try:
+                        st = os.stat(p)
+                        return (st.st_ino, st.st_mtime_ns, st.st_size)
+                    except OSError:
+                        return None
+
+                def _watch_cert():
+                    base = (_cert_sig(_cert), _cert_sig(_key))
+                    while True:
+                        time.sleep(_hr_interval)
+                        now = (_cert_sig(_cert), _cert_sig(_key))
+                        if None in now or now == base:
+                            continue
+                        _log('INFO', 'system',
+                             '证书已更新（inode/mtime/size 变化），2 秒后重启进程加载新证书: %s' % _cert)
+                        time.sleep(2)
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+                threading.Thread(target=_watch_cert, daemon=True, name='cert-watch').start()
+                _log('INFO', 'system', '证书热重载已启用（%ds 轮询 cert=%s）' % (_hr_interval, _cert))
         except Exception as e:
             _log('ERROR', 'system', 'HTTPS 启动失败，回退到 HTTP（明文）: %s' % e)
             print('[CRITICAL] 配置了 TLS 但启动失败：%s —— 已回退 HTTP，请修正证书路径/权限' % e, flush=True)

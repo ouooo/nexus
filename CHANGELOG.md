@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.11 证书热重载：续期后自动加载新证书，不再需要人工 restart — 2026-11-09
+### 症状 / 需求
+证书改成挂载 derper 目录（2.2.9）之后，「文件能读到新的」这半截解决了，但 `api.py` 只在启动时 `load_cert_chain` 一次 —— acme 续期后进程仍在用旧证书，表现为「续期成功、浏览器还报旧证书」，必须人工 `docker restart nexus-test`。
+
+用户提出的关键要求：**这个能力要长在 NEXUS 里，而不是外挂一个 acme hook —— 谁部署只要把证书路径挂进容器就自动读新的。**
+
+### 改法（`api.py`）
+- 启用原生 HTTPS 后起一个 `cert-watch` 守护线程，按 `(inode, mtime_ns, size)` 三元组比对证书与私钥；
+- 变化即 `os.execv` 重启自身进程重建 SSLContext（与既有 `/api/restart` 同一套做法：PID 不变，容器状态与 `--restart` 策略都不受影响）；
+- 之所以盯着 **inode**：acme 续期是「写临时文件 → rename」，rename 必换 inode，这正是单文件 bind mount 永远读旧证书的根因；
+- `DASH_TLS_HOT_RELOAD=0` 可关闭；`DASH_TLS_HOT_RELOAD_INTERVAL` 调轮询间隔（默认 60s，验证时用 5s）。
+
+### 验收（实测，临时容器 + 自签证书模拟 acme rename）
+- 初始 `https://127.0.0.1:18100/` → **200**，证书指纹 `2ba7e1f58fe18189`；
+- `mv` 换证书后 inode `168178 → 168185`；
+- 5s 轮询命中，日志：`证书已更新（inode/mtime/size 变化），2 秒后重启进程加载新证书`；
+- 重启后指纹 **`92e8284ac161f979`**（新证书已生效），`/proc/1/comm` 仍为 `python3`（PID 1 保持，容器没重启）；
+- 日志连续两次出现 `NEXUS API 服务启动` + `已启用原生 HTTPS`，证明是进程真的重新加载了证书。
+
+### 为什么不做 acme hook
+钩子必须挂在部署方（acme 容器 hook 或 NAS 定时任务），换个部署方式就得重新配一遍；而且 hook 只知道「证书文件变了」，不知道「NEXUS 到底用不用这份证书」。做在进程里则相反：只要 `DASH_TLS_CERT` 指向的文件被替换就自动生效，与谁签发、怎么续期无关。
+
 ## 2.2.10 私有 JSON 搜索接口 + 健康检查自适应 + 插件入仓 — 2026-11-08
 
 ### 症状 / 需求
