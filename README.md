@@ -97,7 +97,11 @@ docker push ghcr.io/ouooo/nexus-dashboard:latest
 
 `latest` 只跟随最新稳定版本，不跟每次提交。正常发版不用手工 push：推 `main` 触发 `.github/workflows/docker-publish.yml`（tag 用 `github.repository` 拼，镜像名自动跟随仓库名）。
 
-GitHub Container Registry 只提供标准 v2 接口，**没有 `v1/search`**（`ghcr.io/v1/search` → 404），所以任何基于注册表搜索的 UI（含群晖 Container Manager 的「注册表 → 搜索」）都搜不到 ghcr 里的镜像，只能按完整名查/拉。因此同名镜像同时发布到 Docker Hub 一份，让搜索框能命中：
+GitHub Container Registry 只提供标准 v2 接口，**没有 `v1/search`**（`ghcr.io/v1/search` → 404），所以任何基于注册表搜索的 UI（含群晖 Container Manager 的「注册表 → 搜索」）都搜不到 ghcr 里的镜像，只能按完整名查/拉。因此同名镜像同时发布到 Docker Hub 一份，让搜索框能命中。
+
+这一步**已自动化**：`.github/workflows/docker-publish.yml` 一次构建双库推送（ghcr 用 `GITHUB_TOKEN`，Docker Hub 用仓库 secrets `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`；未配 secret 时自动只推 ghcr）。发版只需推一个 `v*` tag，或在 Actions 页点 Run workflow。
+
+本地不经过 Actions、手工直推时才需要下面这几行：
 
 ```bash
 docker tag nexus:2.2.11 bonanzalee/nexus-dashboard:2.2.11
