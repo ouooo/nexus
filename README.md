@@ -9,7 +9,9 @@
 ## 快速开始
 
 ```bash
+# 两个来源，内容同一个 digest，任选其一
 docker pull ghcr.io/ouooo/nexus-dashboard:latest
+# docker pull bonanzalee/nexus-dashboard:latest   # Docker Hub（群晖 Container Manager 的注册表搜索能命中这个）
 
 docker run -d --name nexus \
   -p 28081:28080 \
@@ -94,6 +96,15 @@ docker push ghcr.io/ouooo/nexus-dashboard:latest
 ```
 
 `latest` 只跟随最新稳定版本，不跟每次提交。正常发版不用手工 push：推 `main` 触发 `.github/workflows/docker-publish.yml`（tag 用 `github.repository` 拼，镜像名自动跟随仓库名）。
+
+GitHub Container Registry 只提供标准 v2 接口，**没有 `v1/search`**（`ghcr.io/v1/search` → 404），所以任何基于注册表搜索的 UI（含群晖 Container Manager 的「注册表 → 搜索」）都搜不到 ghcr 里的镜像，只能按完整名查/拉。因此同名镜像同时发布到 Docker Hub 一份，让搜索框能命中：
+
+```bash
+docker tag nexus:2.2.11 bonanzalee/nexus-dashboard:2.2.11
+docker tag nexus:2.2.11 bonanzalee/nexus-dashboard:latest
+docker push bonanzalee/nexus-dashboard:2.2.11
+docker push bonanzalee/nexus-dashboard:latest
+```
 
 ## 版本
 
