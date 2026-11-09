@@ -2,7 +2,7 @@
 # 用法：docker compose -f docker-compose.example.yml up -d
 services:
   nexus:
-    image: bonanzalee/nexus:2.1.0      # 也可用 :latest
+    image: ghcr.io/ouooo/nexus-dashboard:latest   # 主来源；也可用 bonanzalee/nexus-dashboard:latest（Docker Hub）
     container_name: nexus
     restart: unless-stopped
     ports:
