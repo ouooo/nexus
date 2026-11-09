@@ -9,13 +9,13 @@
 ## 快速开始
 
 ```bash
-docker pull bonanzalee/nexus:2.1.0
+docker pull ghcr.io/ouooo/nexus-dashboard:latest
 
 docker run -d --name nexus \
   -p 28081:28080 \
   -v ./data:/data \
   --restart unless-stopped \
-  bonanzalee/nexus:2.1.0
+  ghcr.io/ouooo/nexus-dashboard:latest
 ```
 
 浏览器打开 `http://<host>:28081/`。
@@ -84,20 +84,20 @@ docker logs nexus 2>&1 | grep 初始口令
 docker build \
   --build-arg GIT_REVISION=$(git rev-parse --short HEAD) \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  -t nexus:2.2.9 .
+  -t nexus:2.2.11 .
 
 # 打发布 tag 并推送
-docker tag nexus:2.2.9 bonanzalee/nexus:2.2.9
-docker tag nexus:2.2.9 bonanzalee/nexus:latest
-docker push bonanzalee/nexus:2.2.9
-docker push bonanzalee/nexus:latest
+docker tag nexus:2.2.11 ghcr.io/ouooo/nexus-dashboard:2.2.11
+docker tag nexus:2.2.11 ghcr.io/ouooo/nexus-dashboard:latest
+docker push ghcr.io/ouooo/nexus-dashboard:2.2.11
+docker push ghcr.io/ouooo/nexus-dashboard:latest
 ```
 
-`latest` 只跟随最新稳定版本，不跟每次提交。
+`latest` 只跟随最新稳定版本，不跟每次提交。正常发版不用手工 push：推 `main` 触发 `.github/workflows/docker-publish.yml`（tag 用 `github.repository` 拼，镜像名自动跟随仓库名）。
 
 ## 版本
 
-当前 `2.2.9`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
+当前 `2.2.11`。变更记录见 `CHANGELOG.md`；页脚、镜像 label 与本文件版本号保持同一口径。
 
 ## 安全说明
 
